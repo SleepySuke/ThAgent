@@ -1,38 +1,192 @@
-target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+# =============================================
+# 通用 Java / Spring Boot / Spring Cloud 项目
+# .gitignore 模板
+# =============================================
 
-### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
-*.iws
+# ---------------------------------------------
+# 1. 编译输出目录
+# ---------------------------------------------
+/target/
+/bin/
+/out/
+/build/
+/classes/
+/lib/
+/dist/
+
+# Maven
+.mvn/
+mvnw
+mvnw.cmd
+.pom.xml.tag
+.pom.xml.releaseBackup
+.pom.xml.versionsBackup
+.pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+# Gradle
+.gradle/
+.gradle-cache/
+.gradle/wrapper/
+.gradle/daemon/
+gradle-app.setting
+gradlew
+gradlew.bat
+build/
+!.gradle/kotlin/
+
+# ---------------------------------------------
+# 2. IDE 相关文件
+# ---------------------------------------------
+# IntelliJ IDEA
+.idea/
 *.iml
 *.ipr
+*.iws
+*.ids
+*.orig
+out/
+local.properties
 
-### Eclipse ###
-.apt_generated
-.classpath
-.factorypath
+# Eclipse
 .project
-.settings
-.springBeans
-.sts4-cache
+.classpath
+.settings/
+bin/
+.metadata/
 
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
+# NetBeans
+nbproject/private/
 build/
-!**/src/main/**/build/
-!**/src/test/**/build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
 
-### VS Code ###
+# VS Code (可选，根据团队习惯)
 .vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
-### Mac OS ###
+# ---------------------------------------------
+# 3. 系统/环境文件
+# ---------------------------------------------
+*.log
+*.tmp
+*.temp
+*.swp
+*~
+~$*
+Thumbs.db
 .DS_Store
+ehthumbs.db
+Desktop.ini
+
+# 日志文件
+logs/
+*.log.*
+spring.log
+
+# 本地配置（不要提交敏感信息！）
+application-dev.properties
+application-local.properties
+application-test.properties
+application-prod.properties
+*.env
+.env
+*.secret
+*.credentials
+#config/
+credentials/
+secrets/
+vault/
+
+# 数据库 / 缓存 / 消息队列相关
+*.db
+*.sqlite
+*.h2
+*.mysql
+*.data
+*.dump
+cache/
+redis/
+mq/
+kafka/
+
+# Docker 相关（如果使用 Dockerfile 但 image 不提交）
+docker-compose.override.yml
+docker-compose.local.yml
+Dockerfile.local
+*.dockerignore
+
+# 配置中心、注册中心等客户端生成的配置（通常本地自动生成，不提交）
+bootstrap-local.properties
+bootstrap-dev.properties
+.nacos/
+.consul/
+.zookeeper/
+.eureka/
+
+# ---------------------------------------------
+# 4. 测试与覆盖率报告（可保留也可忽略）
+# ---------------------------------------------
+/target/surefire-reports/
+/target/failsafe-reports/
+/test-output/
+htmlcov/
+coverage/
+*.lcov
+jacoco.exec
+
+# ---------------------------------------------
+# 5. 其它
+# ---------------------------------------------
+# Package Files
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Node.js （如果后端项目里不小心引入了前端工具，比如用 Vue 构建页面）
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Maven Wrapper 可保留，但以下是可选忽略
+# mvnw
+# mvnw.cmd
+# .mvn/
+
+# 某些自动生成的代码/文件
+target/generated-sources/
+generated/
+*.gen
+*.template
+
+# 本地覆盖配置（如 application.yml）
+application.yml
+application-*.yml
+application-*.yaml
+bootstrap-*.yml
+bootstrap-*.yaml
+
+# 避免提交 IDE 调试配置（按需）
+*.launch
+*.sublime-workspace
+
+# 自定义脚本/工具生成的内容
+/scripts/output/
+/temp/
+/backup/

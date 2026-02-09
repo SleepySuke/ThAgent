@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.suke.ai.mapper.ContentMapper">
+    <insert id="insert" parameterType="com.suke.ai.pojo.Content" keyProperty = "id" useGeneratedKeys="true">
+        insert into content(conversation_id,user_content,assistant_content,user_id,create_time,update_time)
+        values(#{conversationId},#{userContent},#{assistantContent},#{userId},#{createTime},#{updateTime})
+    </insert>
+</mapper>
