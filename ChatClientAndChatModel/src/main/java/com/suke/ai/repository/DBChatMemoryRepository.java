@@ -2,6 +2,7 @@ package com.suke.ai.repository;
 
 import com.suke.ai.mapper.ContentMapper;
 import com.suke.ai.pojo.Content;
+import com.suke.ai.util.UserContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -33,6 +34,9 @@ public class DBChatMemoryRepository implements ChatMemoryRepository {
     @Autowired
     private ContentMapper contentMapper;
 
+    //用于缓存当前的用户对话
+    //private final static Map<String,String> conversation = new HashMap<>();
+
     @Override
     @Transactional(readOnly = true)
     public List<String> findConversationIds() {
@@ -42,15 +46,14 @@ public class DBChatMemoryRepository implements ChatMemoryRepository {
     @Override
     @Transactional(readOnly = true)
     public List<Message> findByConversationId(String conversationId) {
-        conversationId = generateConversationId();
-        log.info("查询的conversationId: {}",conversationId);
-        //todo 然后去比较截取当前的用户id去比较 相同则去搜索这次对话 不相同的情况则是一个新用户 新对话
-        String tempId = conversationId.substring(0,conversationId.indexOf("_"));
-        if(!tempId.equals(getUerId())){
-            //todo 不同用户则去数据库中查询
-            return List.of();
+        String ctxConversationId = null;
+        if(conversationId != null || conversationId.contains("_")){
+            ctxConversationId = conversationId.split("_")[0];
+        }else{
+            ctxConversationId = "1";
         }
-        List<Content> contents = contentMapper.findByConversationId(conversationId);
+        log.info("ctxConversationId -> {}", ctxConversationId);
+        List<Content> contents = contentMapper.findByConversationId(ctxConversationId);
         //不存在对话内容，此时对话返回为空，AI模型直接开启一次新对话
         if(contents == null || contents.isEmpty()){
             return List.of();
@@ -71,16 +74,21 @@ public class DBChatMemoryRepository implements ChatMemoryRepository {
     @Override
     @Transactional
     public void saveAll(String conversationId, List<Message> messages) {
-        //todo 文章的id应该为当前的用户加时间戳
-        //todo 目前我这里的userId写死了
-        conversationId = generateConversationId();
+        log.info("id -> {}", conversationId);
         if(messages == null || messages.isEmpty()){
             log.warn("并没有发生对话，无需保存");
             return;
         }
+        if(conversationId == null || conversationId.isEmpty()){
+            conversationId = generateConversationId();
+        }
+        log.info("conversationId->{}", conversationId);
         String userContent = null;
         String assistantContent = null;
         Content content = new Content();
+        //拿到之前的对话之后，将原有的数据删掉可以有效防止数据的对话的轮次过多
+        //虽然也可以通过上下文窗口进行限制 但这里是存在数据库中 如果过多 数据库内容单独的一个用户会出现很多条
+        deleteByConversationId(conversationId);
         for (Message message : messages) {
             MessageType messageType = message.getMessageType();
             switch (messageType){
@@ -107,12 +115,12 @@ public class DBChatMemoryRepository implements ChatMemoryRepository {
     }
 
     private String getUerId(){
-        //todo 获取用户id
-        return "1";
+        String userId = UserContext.getCurrentUserId();
+        return userId != null ? userId : "1"; //默认ID
     }
 
     private String generateConversationId(){
-        return getUerId() + "_" + System.currentTimeMillis();
+        return getUerId()+"_"+System.currentTimeMillis();
     }
 
     private void saveContent(String conversationId, String userContent, String assistantContent){
