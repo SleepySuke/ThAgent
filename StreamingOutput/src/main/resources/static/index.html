@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>sse流式输出</title>
+</head>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 20px;
+    }
+
+    #messageInput {
+        width: 90%;
+        padding: 10px;
+        font-size: 16px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        margin-bottom: 10px;
+    }
+
+    #messages div {
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+        font-size: 14px;
+        color: #333;
+    }
+
+    #messages div:last-child {
+        border-bottom: none;
+    }
+
+    button {
+        padding: 10px 10px;
+        font-size: 16px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+
+    button :hover {
+        background-color: #0056b3;
+    }
+
+    #messages {
+        margin-top: 20px;
+        padding: 15px;
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+</style>
+<body>
+<textarea id="messageInput" rows="4" cols="50" placeholder="请输入你的问题..."></textarea>
+<button onclick="sendMsg()">发送提问</button>
+<div id="messages"></div>
+<script>
+    function sendMsg() {
+        const message = document.getElementById('messageInput').value;
+        if (message == '') {
+            return false;
+        }
+        <!--        客户端使用js的EventSource对象连接到服务器上的一个特定端点(url)-->
+        const eventSource = new EventSource('/stream/chatflux3?msg=' + message);
+
+        <!--            监听消息事件-->
+        eventSource.onmessage = function (event) {
+            const data = event.data;
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML += data;
+        };
+        <!--            监听错误事件，当连接发送错误(包括断开)时触发-->
+        eventSource.onerror = function (error) {
+            console.error('Error:', error);
+            eventSource.close();
+        };
+    }
+</script>
+</body>
+</html>

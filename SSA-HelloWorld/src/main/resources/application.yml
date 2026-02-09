@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: SSA-HelloWorld
+    #SpringAIAlibaba Config配置
+  ai:
+    dashscope:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: sk-9d0f491da4df423cb803bdc20a6a18d9
+      chat:
+        options:
+          model: qwen-plus
+server:
+  port: 8001
+  #大模型对话中文乱码UTF8编码处理
+  servlet:
+    encoding:
+      enabled: true
+      force: true
+      charset: UTF-8
+

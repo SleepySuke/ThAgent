@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: MCP
+    #SpringAIAlibaba Config配置
+  ai:
+    chat:
+      memory:
+        store-type: jdbc
+        repository:
+          jdbc:
+            initialize-schema: always
+            table-name: concat
+
+    dashscope:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: sk-5c976105850f4bfeadcd837b2c049668
+      chat:
+        options:
+          model: qwen-plus-2025-12-01
+#  datasource:
+#    driver-class-name: com.mysql.cj.jdbc.Driver
+#    url: jdbc:mysql://localhost:3306/suke?characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+#    username: root
+#    password: suke041230@
+server:
+  port: 8888
+  #大模型对话中文乱码UTF8编码处理
+  servlet:
+    encoding:
+      enabled: true
+      force: true
+      charset: UTF-8
+

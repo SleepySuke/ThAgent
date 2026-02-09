@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: ChatClientAndChatModel
+    #SpringAIAlibaba Config配置
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ai_chat?characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: suke041230@
+
+
+  ai:
+    dashscope:
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api-key: sk-5c976105850f4bfeadcd837b2c049668
+      chat:
+        options:
+          model: qwen-plus-2025-12-01
+    chat:
+      memory:
+        store-type: jdbc
+        repository:
+          jdbc:
+            initialize-schema: always
+            table-name: concat
+    mcp:
+      client:
+        sse:
+          connections:
+            server_1:
+              url: http://127.0.0.1:8888
+  http:
+    client:
+      connect-timeout: 1000000
+
+
+server:
+  port: 8001
+  #大模型对话中文乱码UTF8编码处理
+  servlet:
+    encoding:
+      enabled: true
+      force: true
+      charset: UTF-8
+# MyBatis 配置
+mybatis:
+  configuration:
+    # 开启驼峰命名自动映射：数据库 user_name -> 实体类 userName
+    map-underscore-to-camel-case: true
+    # 其他可选配置
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 打印SQL日志（调试用）
+  # 如果使用 XML 映射文件，配置 mapper 位置
+  mapper-locations: classpath:mapper/*.xml
+  # 配置实体类别名包扫描
+  type-aliases-package: com.suke.ai.pojo
+
