@@ -190,3 +190,24 @@ bootstrap-*.yaml
 /scripts/output/
 /temp/
 /backup/
+
+
+# 配置文件
+src/main/resources/application*.yml
+src/main/resources/application*.properties
+src/main/resources/*.key
+src/main/resources/*.pem
+
+# 环境特定配置
+src/main/resources/application-dev.yml
+src/main/resources/application-prod.yml
+src/main/resources/application-test.yml
+
+# 日志文件
+logs/
+*.log
+
+# 其他敏感文件
+*.keystore
+*.jks
+*.p12
