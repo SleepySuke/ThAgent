@@ -1,0 +1,10 @@
+笔记文件
+
+1. MCP (Model Context Protocol) 是一个开放协议
+2. 允许 LLM 通过标准化接口访问外部工具和数据
+3. 这个 demo 使用 @modelcontextprotocol/server-filesystem 来操作文件
+
+待办事项：
+- [x] 创建测试文件
+- [ ] 测试文件读取功能
+- [ ] 测试目录列表功能
