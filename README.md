@@ -189,9 +189,9 @@ DASHSCOPE_API_KEY=<your-api-key>
 - [ ] 添加 RAG Agent 示例
 - [ ] 添加更多 MCP 工具示例
 - [ ] 部署和监控示例
-- [ ] 同时可以移步到main分支上的Java代码教程，里面也介绍有关SpringAI、Graph集成使用
 
 ## 参考资源
+- 同时可以移步到main分支上的Java代码教程，里面也介绍有关SpringAI、Graph集成使用
 
 - [Google ADK 文档](https://github.com/google/adk-python)
 - [OpenAI Agents SDK](https://github.com/openai/openai-agents-sdk)
