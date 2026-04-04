@@ -1,0 +1,12 @@
+# LangChain 核心
+langchain-core
+langchain-community
+
+# 文档加载器依赖
+jq
+
+# 通义千问集成
+dashscope
+
+# OpenAI SDK
+openai
