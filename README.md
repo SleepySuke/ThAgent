@@ -155,6 +155,17 @@ mcp
 
 ## 环境配置
 
+> **快速上手指南：** 本项目使用 [uv](https://github.com/astral-sh/uv) 管理 Python 环境和依赖，通过 `python -m` 方式启动各模块。详细教程请参考 [docs/uv-python-guide.md](docs/uv-python-guide.md)。
+
+```bash
+# 快速初始化
+uv init --no-readme
+uv add --requirements requirements.txt
+
+# 运行示例
+uv run python -m AIGC.llm_agent_demo.demo_01
+```
+
 创建 `.env` 文件并配置以下环境变量：
 
 ```env
