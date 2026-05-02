@@ -12,6 +12,7 @@ Agent/
 │   └── open_ai_agents/                # OpenAI Agents SDK 示例
 │       └── financial_research_agent/  # 金融研究多 Agent 系统
 │
+├── clothing-customer-service/         # 服装客服 RAG 项目（资料上传 + 多轮问答）
 ├── financial-advisor/                 # 金融顾问完整项目 (重点)
 ├── agent_team/                        # Agent 团队协作示例
 │   └── weather_agent/                 # 天气 Agent (含子代理)
@@ -59,7 +60,26 @@ Agent/
 | `writer_agent` | 撰写分析报告 |
 | `verifier_agent` | 验证报告一致性 |
 
-### 2. financial-advisor - 金融顾问完整项目
+### 2. clothing-customer-service - 服装客服 RAG 项目
+
+一个围绕服装客服场景搭建的 RAG Demo，当前已经串起离线资料导入与在线多轮问答两个核心流程：
+
+| 模块 | 功能 |
+|------|------|
+| `app_file_upload.py` | Streamlit 资料上传与默认资料初始化页面 |
+| `app_qa.py` | Streamlit 问答页面，支持历史会话切换 |
+| `knowledge_base.py` | 文本切分、MD5 去重、知识库写入 |
+| `vector_stores.py` | Chroma 向量检索封装 |
+| `rag.py` | 历史对话改写、资料检索、回答生成 |
+| `file_history_store.py` | 文件化历史消息持久化 |
+
+**当前能力:**
+- 支持默认资料初始化与自定义文件上传
+- 支持基于 Chroma 的资料持久化检索
+- 支持历史对话和 RAG 结合的多轮问答
+- 支持页面刷新后恢复当前会话，并切换历史会话
+
+### 3. financial-advisor - 金融顾问完整项目
 
 基于 **Google ADK** 框架构建的完整项目：
 
@@ -73,7 +93,7 @@ financial_coordinator (主协调 Agent)
 
 包含完整的部署脚本、评估测试和单元测试。
 
-### 3. agent_team/weather_agent - Agent 团队协作
+### 4. agent_team/weather_agent - Agent 团队协作
 
 展示了如何构建主 Agent 管理多个子 Agent 的系统：
 
@@ -89,7 +109,7 @@ weather_agent (主协调 Agent)
 - 护栏功能 (Guardrail) - 拦截特定关键词和参数
 - Session 状态管理
 
-### 4. story_agent - 故事生成工作流
+### 5. story_agent - 故事生成工作流
 
 展示了自定义 `BaseAgent` 的实现：
 
@@ -104,7 +124,7 @@ StoryFlowAgent
     └── tone_check    # 语气检查
 ```
 
-### 5. MCP 协议示例
+### 6. MCP 协议示例
 
 | 模块 | 功能 |
 |------|------|
@@ -112,14 +132,14 @@ StoryFlowAgent
 | `mcp_client` | MCP 客户端，调用自定义 MCP 服务 |
 | `mcp_server` | MCP 服务端，暴露 ADK 工具 |
 
-### 6. human_tool_confirmation - 人工确认机制
+### 7. human_tool_confirmation - 人工确认机制
 
 展示如何在工具调用前请求人工确认：
 - `require_confirmation` - 设置确认阈值
 - `tool_context.request_confirmation()` - 请求确认
 - `ResumabilityConfig` - 支持会话恢复
 
-### 7. skills_agent - 技能系统
+### 8. skills_agent - 技能系统
 
 展示 ADK 的 **SkillToolset** 功能，包含天气技能示例。
 
@@ -132,6 +152,9 @@ StoryFlowAgent
 | Google ADK | 主要 Agent 开发框架 |
 | OpenAI Agents SDK | OpenAI Agent 框架 |
 | LiteLlm | 统一 LLM 接口 |
+| LangChain | RAG 链路与消息历史编排 |
+| Chroma | 向量存储与资料检索 |
+| Streamlit | RAG 项目的 Web 页面 |
 | MCP | Model Context Protocol |
 
 ### 模型支持
@@ -166,6 +189,13 @@ uv add --requirements requirements.txt
 uv run python -m AIGC.llm_agent_demo.demo_01
 ```
 
+如果要体验服装客服 RAG 项目，可直接启动两个 Streamlit 页面：
+
+```bash
+streamlit run clothing-customer-service/app_file_upload.py
+streamlit run clothing-customer-service/app_qa.py
+```
+
 创建 `.env` 文件并配置以下环境变量：
 
 ```env
@@ -191,13 +221,18 @@ DASHSCOPE_API_KEY=<your-api-key>
 6. **护栏机制**: 使用回调函数实现安全检查
 7. **MCP 协议**: 标准化工具接口
 8. **技能系统**: 可扩展的技能模块
+9. **RAG 体系**: 资料切分、向量检索、检索增强问答、多轮历史会话结合
+
+## 当前状态
+
+- [x] 添加更多 Agent 模式示例
+- [x] 添加 RAG Agent 示例
+- [x] 添加基础 MCP 工具示例
 
 ## 后续计划
 
-- [ ] 添加更多 Agent 模式示例
 - [ ] 完善单元测试覆盖率
 - [ ] 添加 LangGraph 集成示例
-- [ ] 添加 RAG Agent 示例
 - [ ] 添加更多 MCP 工具示例
 - [ ] 部署和监控示例
 
