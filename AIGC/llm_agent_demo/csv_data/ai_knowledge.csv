@@ -1,0 +1,13 @@
+id,title,content,category
+1,什么是AI Agent,AI Agent是一种能够自主感知环境做出决策并执行动作以实现特定目标的系统。它具备规划记忆和工具使用的能力。,基础概念
+2,Agent的核心组件,AI Agent由大语言模型、规划模块、记忆模块和工具模块四个核心组件构成。LLM负责理解和推理，规划模块拆解任务，记忆模块存储历史，工具模块连接外部服务。,基础概念
+3,Google ADK框架,Google ADK是Google推出的Agent开发框架，支持多Agent协作、Session状态管理、回调机制和护栏功能。它还集成了MCP协议，可以连接外部工具服务。,框架
+4,OpenAI Agents SDK,OpenAI Agents SDK是轻量级Agent框架，支持Handoff机制实现Agent间任务转移。通过LiteLLM集成可方便切换不同大模型提供商。,框架
+5,LangChain框架,LangChain提供了丰富的文档加载器、文本分割器、向量存储和Chain编排能力，是最早流行的LLM应用开发框架。LangGraph是其扩展，专注于有状态的图式工作流。,框架
+6,RecursiveCharacterTextSplitter,这是最常用的文本分割器，会依次尝试使用换行符、句号、空格等分隔符进行分割，优先在段落边界处切分，保证语义完整性。,文档处理
+7,向量存储的作用,向量存储用于保存文本经过Embedding后的高维向量，支持相似度搜索。常见方案有FAISS、Chroma、Pinecone和pgvector。它是RAG系统中检索环节的核心组件。,RAG
+8,RAG的工作流程,RAG的典型流程为文档加载、文本分割、向量化存储、检索与生成四个步骤。用户提问时先检索相关文本块，再作为上下文传给大模型生成回答。,RAG
+9,Embedding模型,Embedding模型将文本转换为高维浮点数向量，语义相近的文本在向量空间中距离也相近。常用的模型有OpenAI的text-embedding-ada-002和DashScope的text-embedding-v3。,RAG
+10,FAISS向量库,FAISS是Facebook开源的高效向量相似度搜索库，支持本地部署，适合开发测试阶段使用。它支持多种索引类型如Flat、IVF、HNSW等。,工具
+11,MCP协议,MCP即Model Context Protocol，是一种标准化工具接口协议，让Agent能够以统一的方式连接和使用外部工具服务。,协议
+12,护栏机制,护栏机制通过回调函数实现安全检查，在Agent执行前后拦截危险操作或敏感内容，保障生产环境中的系统安全。,安全

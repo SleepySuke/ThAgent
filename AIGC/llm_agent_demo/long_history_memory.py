@@ -8,7 +8,8 @@
 
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import message_to_dict, messages_from_dict,BaseMessage
-import json, os
+import json
+import os
 from typing import Sequence
 
 from langchain_core.prompts import PromptTemplate
@@ -44,7 +45,7 @@ class FileChatMessageHistory(BaseChatMessageHistory):
         with open(self.file_path,'w',encoding='utf-8') as f:       
             f.write([],f)
 
-model = ChatTongyi(api_key="sk-5c976105850f4bfeadcd837b2c049668",model="qwen-plus")
+model = ChatTongyi(api_key="",model="qwen-plus")
 
 def print_prompt(full_prompt):
     print("="*20,full_prompt.to_string(),"="*20)

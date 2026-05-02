@@ -1,0 +1,23 @@
+flowchart TD
+    subgraph Offline[离线流程：资料初始化]
+        A1[config.json 默认资料清单]
+        A2[app_file_upload.py 初始化/上传入口]
+        A3[knowledge_base.py 文本切分与去重]
+        A4[DashScope Embedding]
+        A5[Chroma 向量库]
+        A1 --> A2 --> A3 --> A4 --> A5
+    end
+
+    subgraph Online[在线流程：用户问答]
+        B1[用户在 Streamlit 提问]
+        B2[app_qa.py 获取 session_id]
+        B3[file_history_store.py 读取历史消息]
+        B4[rag.py 改写检索问题]
+        B5[vector_stores.py 召回相关资料]
+        B6[rag.py 组装上下文与历史]
+        B7[Qwen 生成回答]
+        B8[写回历史对话]
+        B1 --> B2 --> B3 --> B4 --> B5 --> B6 --> B7 --> B8
+    end
+
+    A5 --> B5

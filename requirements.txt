@@ -10,3 +10,12 @@ dashscope
 
 # OpenAI SDK
 openai
+
+# PyPDFLoader 依赖
+pypdf
+
+# 本地向量化数据存储
+Chroma
+langchain_chroma
+# 文件上传--WEB页面
+streamlit

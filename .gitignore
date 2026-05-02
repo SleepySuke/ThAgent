@@ -7,6 +7,8 @@
 __pycache__/
 *.pyc
 
+.python-version
+
 # 虚拟环境
 .adk/
 .venv/
@@ -17,3 +19,9 @@ ENV/
 # IDE 配置（如 VSCode）
 .vscode/
 .idea/
+
+.claude
+
+chat_history/
+chroma_db/
+financial/.env.example/

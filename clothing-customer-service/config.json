@@ -1,0 +1,17 @@
+{
+  "collection_name":"clothing_customer_service",
+  "embedding-model":"text-embedding-v3",
+  "persist_directory":"/Users/suke/Python/Agent/clothing-customer-service/chroma_db",
+  "retriever_k":"3",
+  "chunk_size":500,
+  "chunk_overlap":50,
+  "max_data_length":10000,
+  "separators":["\n\n", "\n", " ", "",".",";",",","!","?","：","？","。","！","；","、","（","）","(",")","【","】","[","]","(",")"],
+  "file_path":"/Users/suke/Python/Agent/clothing-customer-service/data/md5.txt",
+  "files": {
+    "data/products.csv": null,
+    "data/faq.csv": null,
+    "data/size_guide.csv": null,
+    "data/return_policy.csv": null
+  }
+}

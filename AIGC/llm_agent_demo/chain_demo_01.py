@@ -9,7 +9,7 @@ from langchain_community.chat_models.tongyi import ChatTongyi
 from langchain_core.runnables.base import RunnableSerializable
 from langchain_core.output_parsers import StrOutputParser
 
-model = ChatTongyi(api_key="sk-5c976105850f4bfeadcd837b2c049668",model="qwen-plus")
+model = ChatTongyi(api_key="",model="qwen-plus")
 
 chat_prompt_template = ChatPromptTemplate.from_messages(
     [
