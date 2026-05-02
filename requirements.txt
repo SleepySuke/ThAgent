@@ -1,6 +1,7 @@
 # LangChain 核心
 langchain-core
 langchain-community
+langchain
 
 # 文档加载器依赖
 jq

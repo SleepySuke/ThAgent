@@ -28,6 +28,11 @@ Agent/
     └── multi_tool_agent/              # 多工具 Agent
 ```
 
+## 项目文档
+
+- [UV + Python 本地包启动指南](docs/uv-python-guide.md)
+- [服装客服 RAG 项目实现说明](docs/clothing-customer-service-rag.md)
+
 ## 模块说明
 
 ### 1. AIGC - 核心学习代码
@@ -63,6 +68,8 @@ Agent/
 ### 2. clothing-customer-service - 服装客服 RAG 项目
 
 一个围绕服装客服场景搭建的 RAG Demo，当前已经串起离线资料导入与在线多轮问答两个核心流程：
+
+详细设计、数据流向、关键实现和已处理问题见 [服装客服 RAG 项目实现说明](docs/clothing-customer-service-rag.md)。
 
 | 模块 | 功能 |
 |------|------|
