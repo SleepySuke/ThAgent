@@ -1,0 +1,3 @@
+main_prompt_file: prompts/main_prompt.txt
+rag_prompt_file: prompts/rag_prompt.txt
+report_prompt_file: prompts/report_prompt.txt

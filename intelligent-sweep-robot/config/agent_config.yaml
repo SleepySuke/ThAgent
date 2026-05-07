@@ -1,0 +1,13 @@
+name: sweep_robot_agent
+stream: true
+middleware:
+  enable_log_before_model: true
+  enable_log_after_model: true
+  enable_tool_monitor: true
+tools:
+  - rag_summarize
+  - get_weather
+  - get_user_location
+  - get_user_id
+  - get_current_month
+  - generate_external_data
