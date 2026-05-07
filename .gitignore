@@ -25,3 +25,4 @@ ENV/
 chat_history/
 chroma_db/
 financial/.env.example/
+.DS_Store

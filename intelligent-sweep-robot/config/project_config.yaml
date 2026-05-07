@@ -1,0 +1,18 @@
+project:
+  name: intelligent-sweep-robot
+  version: '1.0'
+  description: 智扫通Agent实验项目
+paths:
+  data_dir: data
+  logs_dir: logs
+  prompts_dir: prompts
+  vector_store_dir: chroma_db
+model:
+  chat_model: qwen-plus
+  embedding_model: text-embedding-v4
+  api_key_env: DASHSCOPE_API_KEY
+  temperature: 0.2
+rag:
+  collection_name: sweep_robot_knowledge
+  chunk_size: 500
+  chunk_overlap: 80

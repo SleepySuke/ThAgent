@@ -1,0 +1,4 @@
+persist_directory: chroma_db
+collection_name: sweep_robot_knowledge
+metadata:
+  hnsw_space: cosine
