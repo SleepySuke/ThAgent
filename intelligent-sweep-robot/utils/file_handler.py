@@ -33,6 +33,8 @@ class DirectoryLoadRequest(BaseModel):
 
     path: DirectoryPath
     deduplicate: bool = True
+    supported_file_types: list[Literal[".txt", ".pdf"]] = Field(default_factory=lambda: [".txt", ".pdf"])
+    deduplicate_by: Literal["content_md5", "file_md5"] = "content_md5"
 
 
 class DuplicateFile(BaseModel):
@@ -201,23 +203,39 @@ def load_file(file_path: str) -> LoadedFile:
     raise ValueError(f"Unsupported file type: {suffix}")
 
 
-def load_directory(directory_path: str, deduplicate: bool = True) -> DirectoryLoadResult:
+def load_directory(
+        directory_path: str,
+        deduplicate: bool = True,
+        supported_file_types: list[str] | None = None,
+        deduplicate_by: Literal["content_md5", "file_md5"] = "content_md5",
+) -> DirectoryLoadResult:
     """批量读取目录中的知识文件。"""
     logger = _get_logger()
-    logger.debug("开始批量读取目录: directory=%s, deduplicate=%s", directory_path, deduplicate)
-    request = DirectoryLoadRequest(path=directory_path, deduplicate=deduplicate)
+    logger.debug(
+        "开始批量读取目录: directory=%s, deduplicate=%s, deduplicate_by=%s",
+        directory_path,
+        deduplicate,
+        deduplicate_by,
+    )
+    request = DirectoryLoadRequest(
+        path=directory_path,
+        deduplicate=deduplicate,
+        supported_file_types=supported_file_types or [".txt", ".pdf"],
+        deduplicate_by=deduplicate_by,
+    )
     target_directory = Path(request.path).resolve()
-    supported_suffixes = {".txt", ".pdf"}
+    supported_suffixes = set(request.supported_file_types)
     loaded_files = []
     skipped_duplicates = []
-    seen_content_md5 = {}
+    seen_md5 = {}
 
     for file_path in sorted(target_directory.iterdir()):
         if not file_path.is_file() or file_path.suffix.lower() not in supported_suffixes:
             continue
 
         loaded_file = load_file(str(file_path))
-        original_file = seen_content_md5.get(loaded_file.content_md5)
+        deduplicate_key = getattr(loaded_file, request.deduplicate_by)
+        original_file = seen_md5.get(deduplicate_key)
         if request.deduplicate and original_file:
             skipped_duplicate = DuplicateFile(
                 source_path=loaded_file.source_path,
@@ -228,14 +246,15 @@ def load_directory(directory_path: str, deduplicate: bool = True) -> DirectoryLo
             )
             skipped_duplicates.append(skipped_duplicate)
             logger.info(
-                "跳过重复知识文件: file=%s, duplicate_of=%s, content_md5=%s",
+                "跳过重复知识文件: file=%s, duplicate_of=%s, deduplicate_by=%s, md5=%s",
                 loaded_file.file_name,
                 original_file.file_name,
-                loaded_file.content_md5,
+                request.deduplicate_by,
+                deduplicate_key,
             )
             continue
 
-        seen_content_md5[loaded_file.content_md5] = loaded_file
+        seen_md5[deduplicate_key] = loaded_file
         loaded_files.append(loaded_file)
 
     result = DirectoryLoadResult(

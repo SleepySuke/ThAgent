@@ -1,0 +1,9 @@
+{
+  "query": "S1 Max 支持自动集尘、自动洗拖布和热风烘干吗？",
+  "answer": "智扫通 S1 Max 支持自动集尘、自动洗拖布和热风烘干。",
+  "retrieved_count": 2,
+  "source_file_names": [
+    "maintenance_knowledge.pdf",
+    "s1_max_knowledge.txt"
+  ]
+}
