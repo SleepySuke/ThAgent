@@ -1,4 +1,27 @@
 persist_directory: chroma_db
 collection_name: sweep_robot_knowledge
+document_loader:
+  supported_file_types:
+    - .txt
+    - .pdf
+  deduplicate: true
+  deduplicate_by: content_md5
+text_splitter:
+  type: recursive_character
+  chunk_size: 500
+  chunk_overlap: 80
+  separators:
+    - "\n\n"
+    - "\n"
+    - "。"
+    - "，"
+    - " "
+    - ""
+retriever:
+  search_type: similarity
+  top_k: 4
+  score_threshold: null
 metadata:
   hnsw_space: cosine
+sync_deleted_files: false
+rebuild_collection: false

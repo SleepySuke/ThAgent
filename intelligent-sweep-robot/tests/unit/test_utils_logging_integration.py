@@ -72,11 +72,6 @@ def test_config_handler_calls_logger(tmp_path, monkeypatch):
                     "api_key_env": "DASHSCOPE_API_KEY",
                     "temperature": 0.2,
                 },
-                "rag": {
-                    "collection_name": "sweep_robot_knowledge",
-                    "chunk_size": 500,
-                    "chunk_overlap": 80,
-                },
             },
             ensure_ascii=False,
         ),

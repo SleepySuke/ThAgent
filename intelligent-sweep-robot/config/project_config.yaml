@@ -8,11 +8,8 @@ paths:
   prompts_dir: prompts
   vector_store_dir: chroma_db
 model:
+  provider: tongyi
   chat_model: qwen-plus
-  embedding_model: text-embedding-v4
+  embedding_model: text-embedding-v3
   api_key_env: DASHSCOPE_API_KEY
   temperature: 0.2
-rag:
-  collection_name: sweep_robot_knowledge
-  chunk_size: 500
-  chunk_overlap: 80

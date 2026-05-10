@@ -1,7 +1,24 @@
-collection_name: sweep_robot_knowledge
-chunk_size: 500
-chunk_overlap: 80
-top_k: 4
-supported_file_types:
-  - .txt
-  - .pdf
+model:
+  use_project_default: true
+  chat_model: null
+  temperature: null
+prompt:
+  prompt_name: rag_prompt
+  include_sources: true
+context:
+  max_context_docs: 4
+  max_context_chars: 4000
+  source_format: "来源：{file_name}\n内容：{content}"
+generation:
+  fallback_answer: 当前知识库资料不足以确认该问题，请补充更多信息或联系人工客服。
+  require_grounded_answer: true
+  allow_unknown_answer: false
+output:
+  include_source_file_names: true
+  include_retrieved_count: true
+reranker:
+  enabled: false
+  provider: null
+  model: null
+  top_n: null
+  score_threshold: null

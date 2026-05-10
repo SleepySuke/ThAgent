@@ -11,10 +11,19 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from utils.config_handler import EnvSecret, ProjectConfig, load_model_api_key, load_project_config
+from utils.config_handler import (
+    ChromaConfig,
+    EnvSecret,
+    ProjectConfig,
+    RagRuntimeConfig,
+    load_chroma_config,
+    load_model_api_key,
+    load_project_config,
+    load_rag_config,
+)
 
 
-def _write_project_config(config_path, chunk_size=500, chunk_overlap=80):
+def _write_project_config(config_path):
     """写入测试用项目配置。"""
     config_data = {
         "project": {
@@ -29,15 +38,39 @@ def _write_project_config(config_path, chunk_size=500, chunk_overlap=80):
             "vector_store_dir": "chroma_db",
         },
         "model": {
+            "provider": "tongyi",
             "chat_model": "qwen-plus",
             "embedding_model": "text-embedding-v4",
             "api_key_env": "DASHSCOPE_API_KEY",
             "temperature": 0.2,
         },
-        "rag": {
-            "collection_name": "sweep_robot_knowledge",
+    }
+    config_path.write_text(json.dumps(config_data, ensure_ascii=False), encoding="utf-8")
+
+
+def _write_chroma_config(config_path, chunk_size=500, chunk_overlap=80):
+    """写入测试用Chroma配置。"""
+    config_data = {
+        "persist_directory": "chroma_db",
+        "collection_name": "sweep_robot_knowledge",
+        "document_loader": {
+            "supported_file_types": [".txt", ".pdf"],
+            "deduplicate": True,
+            "deduplicate_by": "content_md5",
+        },
+        "text_splitter": {
+            "type": "recursive_character",
             "chunk_size": chunk_size,
             "chunk_overlap": chunk_overlap,
+            "separators": ["\n\n", "\n", "。", "，", " ", ""],
+        },
+        "retriever": {
+            "search_type": "similarity",
+            "top_k": 4,
+            "score_threshold": None,
+        },
+        "metadata": {
+            "hnsw_space": "cosine",
         },
     }
     config_path.write_text(json.dumps(config_data, ensure_ascii=False), encoding="utf-8")
@@ -54,16 +87,16 @@ def test_load_project_config_returns_project_config_model(tmp_path):
     assert config.project.name == "intelligent-sweep-robot"
     assert config.paths.data_dir == "data"
     assert config.model.chat_model == "qwen-plus"
-    assert config.rag.collection_name == "sweep_robot_knowledge"
+    assert config.model.embedding_model == "text-embedding-v4"
 
 
-def test_load_project_config_rejects_invalid_chunk_overlap(tmp_path):
-    """chunk_overlap不能大于或等于chunk_size。"""
-    config_path = tmp_path / "project_config.json"
-    _write_project_config(config_path, chunk_size=100, chunk_overlap=100)
+def test_load_chroma_config_rejects_invalid_chunk_overlap(tmp_path):
+    """Chroma切分配置中chunk_overlap不能大于或等于chunk_size。"""
+    config_path = tmp_path / "chroma_config.json"
+    _write_chroma_config(config_path, chunk_size=100, chunk_overlap=100)
 
     with pytest.raises(ValidationError):
-        load_project_config(str(config_path))
+        load_chroma_config(str(config_path))
 
 
 def test_default_project_config_exists_and_loads():
@@ -73,7 +106,32 @@ def test_default_project_config_exists_and_loads():
     assert isinstance(config, ProjectConfig)
     assert config.paths.data_dir == "data"
     assert config.model.api_key_env == "DASHSCOPE_API_KEY"
-    assert config.rag.chunk_size > config.rag.chunk_overlap
+    assert config.model.embedding_model
+
+
+def test_default_chroma_config_exists_and_loads():
+    """默认Chroma配置应该只描述向量库、文档加载、切分和召回。"""
+    config = load_chroma_config()
+
+    assert isinstance(config, ChromaConfig)
+    assert config.collection_name == "sweep_robot_knowledge"
+    assert config.document_loader.supported_file_types == [".txt", ".pdf"]
+    assert config.document_loader.deduplicate is True
+    assert config.document_loader.deduplicate_by == "content_md5"
+    assert config.text_splitter.chunk_size > config.text_splitter.chunk_overlap
+    assert config.retriever.top_k == 4
+
+
+def test_default_rag_config_exists_and_loads():
+    """默认RAG配置应该只描述RAG编排、prompt、上下文、生成和输出策略。"""
+    config = load_rag_config()
+
+    assert isinstance(config, RagRuntimeConfig)
+    assert config.model.use_project_default is True
+    assert config.prompt.prompt_name == "rag_prompt"
+    assert config.context.max_context_docs == 4
+    assert config.generation.require_grounded_answer is True
+    assert config.output.include_source_file_names is True
 
 
 def test_load_model_api_key_reads_secret_from_env_file(tmp_path, monkeypatch):
