@@ -22,7 +22,7 @@ PYTHON ?= $(if $(wildcard $(PROJECT_PYTHON)),$(PROJECT_PYTHON),$(if $(wildcard $
 # 默认 target：输入 make 不带参数时，显示帮助信息
 .DEFAULT_GOAL := help
 
-.PHONY: help test unit e2e build-vector-store test-tool-calling
+.PHONY: help test unit e2e build-vector-store test-tool-calling run-agent
 
 help:
 	@echo ""
@@ -35,6 +35,7 @@ help:
 	@echo "  make e2e                 运行端到端测试（委托到 tests/Makefile）"
 	@echo "  make build-vector-store  从 data/ 构建 Chroma 向量库"
 	@echo "  make test-tool-calling   运行 LLM Tool Calling 验证脚本"
+	@echo "  make run-agent           启动 Agent 交互式命令行"
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
@@ -52,3 +53,7 @@ build-vector-store:
 # 验证 LLM 是否能正确识别、选择并调用 Agent 工具
 test-tool-calling:
 	PYTHONPATH=$(PROJECT_ROOT) $(PYTHON) $(PROJECT_ROOT)/tests/e2e/test_tool_calling.py
+
+# 启动 Agent 交互式命令行
+run-agent:
+	PYTHONPATH=$(PROJECT_ROOT) $(PYTHON) $(PROJECT_ROOT)/run_agent.py

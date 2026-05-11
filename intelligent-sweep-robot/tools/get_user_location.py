@@ -10,7 +10,9 @@
 from langchain_core.tools import tool
 
 
-@tool
+@tool(
+    description="获取用户当前所在的城市或地理位置信息。当用户问题涉及天气、地理位置对拖地或烘干的影响，并且缺少地点信息时，先调用本工具获取城市，再按需调用 get_weather。"
+)
 def get_user_location() -> str:
     """获取用户当前所在的城市或地理位置信息。"""
     return "深圳市"

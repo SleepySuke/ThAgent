@@ -11,7 +11,10 @@
 from langchain_core.tools import tool
 
 
-@tool
+@tool(
+    description="""根据用户 ID 和月份生成扫地机器人使用数据，包括清洁次数、清洁面积、耗材状态和异常日志。
+调用时机：只有当用户已购买且已绑定设备，并且已经具备用户 ID 和报告月份时，才调用本工具生成正式报告数据。如果用户未购买或未绑定设备，不要调用本工具伪造真实数据。"""
+)
 def generate_external_data(user_id: str, month: str) -> str:
     """根据用户 ID 和月份生成扫地机器人使用数据，包括清洁次数、清洁面积、耗材状态和异常日志。"""
     return (

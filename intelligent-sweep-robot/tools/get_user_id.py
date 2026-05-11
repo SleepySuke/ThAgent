@@ -10,7 +10,9 @@
 from langchain_core.tools import tool
 
 
-@tool
+@tool(
+    description="获取当前用户的唯一标识 ID，用于判断用户状态和生成个性化报告。当用户主动要求生成使用报告、月度报告、清洁分析或优化建议时，先调用本工具获取用户 ID。"
+)
 def get_user_id() -> str:
     """获取当前用户的唯一标识 ID，用于判断用户状态和生成个性化报告。"""
     return "user_001"
