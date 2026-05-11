@@ -23,7 +23,10 @@ def _get_rag_service() -> RagSummarizeService:
     return _rag_service
 
 
-@tool
+@tool(
+    description="""从智扫通知识库检索产品资料、售前问答、售后排障、耗材维护、报告规则和示例模板，并生成基于资料的总结。
+调用时机：当用户咨询产品功能、型号对比、价格套餐、购买建议、适用家庭场景、售后处理、故障排查、耗材更换、维护周期时优先调用本工具。"""
+)
 def rag_summarize(query: str) -> str:
     """从智扫通知识库检索产品资料、售前问答、售后排障、耗材维护、报告规则和示例模板，并生成基于资料的总结。"""
     result = _get_rag_service().query(query)
