@@ -53,7 +53,7 @@ def run_test_case(agent, case_id, user_query):
                     display = tool_content[:300] + "..." if len(tool_content) > 300 else tool_content
                     for line in display.split("\n"):
                         print(f"      {line}")
-            elif node_name == "agent":
+            elif node_name == "model":
                 for msg in node_data.get("messages", []):
                     content = getattr(msg, "content", "")
                     if content and getattr(msg, "type", None) == "ai":
