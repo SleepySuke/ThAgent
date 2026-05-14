@@ -236,6 +236,19 @@ DASHSCOPE_API_KEY=<your-api-key>
 - [x] 添加 RAG Agent 示例
 - [x] 添加基础 MCP 工具示例
 
+### 9. intelligent-sweep-robot — 智扫通 Agent
+
+基于 **LangChain** 构建的扫地机器人智能客服 Agent，完整的 Agent 闭环项目。详见 [intelligent-sweep-robot/README.md](intelligent-sweep-robot/README.md)。
+
+| 特性 | 说明 |
+|------|------|
+| Agent 编排 | `langchain.agents.create_agent` + 动态 Prompt 切换 |
+| Middleware | 执行链路观测 (before/after model, tool monitor) |
+| RAG | Chroma 向量库 + 知识库检索总结 |
+| 工具 | 6 个 LangChain Tool (RAG 总结 / 天气 / 位置 / 用户 ID / 月份 / 使用数据) |
+| 前端 | Streamlit 对话界面 (流式输出 + 文件上传 + 历史持久化) |
+| 测试 | 单元测试 + 端到端测试 |
+
 ## 后续计划
 
 - [ ] 完善单元测试覆盖率

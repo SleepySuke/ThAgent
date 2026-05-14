@@ -22,7 +22,7 @@ PYTHON ?= $(if $(wildcard $(PROJECT_PYTHON)),$(PROJECT_PYTHON),$(if $(wildcard $
 # 默认 target：输入 make 不带参数时，显示帮助信息
 .DEFAULT_GOAL := help
 
-.PHONY: help test unit e2e build-vector-store test-tool-calling run-agent
+.PHONY: help test unit e2e build-vector-store test-tool-calling run-agent run-web
 
 help:
 	@echo ""
@@ -36,6 +36,7 @@ help:
 	@echo "  make build-vector-store  从 data/ 构建 Chroma 向量库"
 	@echo "  make test-tool-calling   运行 LLM Tool Calling 验证脚本"
 	@echo "  make run-agent           启动 Agent 交互式命令行"
+	@echo "  make run-web             启动 Streamlit Web 界面"
 	@echo ""
 	@echo "═══════════════════════════════════════════════════════════"
 	@echo ""
@@ -57,3 +58,7 @@ test-tool-calling:
 # 启动 Agent 交互式命令行
 run-agent:
 	PYTHONPATH=$(PROJECT_ROOT) $(PYTHON) $(PROJECT_ROOT)/run_agent.py
+
+# 启动 Streamlit Web 界面
+run-web:
+	PYTHONPATH=$(PROJECT_ROOT) streamlit run $(PROJECT_ROOT)/app.py

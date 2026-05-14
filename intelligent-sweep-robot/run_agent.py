@@ -45,7 +45,7 @@ def main():
                     for msg in node_data.get("messages", []):
                         tool_name = getattr(msg, "name", "unknown")
                         print(f"\n  🔧 [{tool_name}]", end=" ")
-                elif node_name == "agent":
+                elif node_name == "model":
                     for msg in node_data.get("messages", []):
                         content = getattr(msg, "content", "")
                         if content:
