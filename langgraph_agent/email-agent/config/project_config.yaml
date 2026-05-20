@@ -1,0 +1,9 @@
+project:
+  name: email-agent
+  version: '1.0'
+  description: 基于LangGraph的邮件Agent
+model:
+  provider: tongyi
+  chat_model: qwen-plus
+  api_key_env: DASHSCOPE_API_KEY
+  temperature: 0.2
