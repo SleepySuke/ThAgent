@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2rem">
+    <h1 style="margin-bottom:0">Overview</h1>
+    <span style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-dim)">v2.0</span>
+</div>
+
+<div class="stats-grid" hx-get="/api/emails/stats" hx-trigger="every 8s" hx-swap="outerHTML">
+    <div class="stat-card">
+        <span class="stat-num">{{ stats.pending }}</span>
+        <span class="stat-label">Pending</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-num">{{ stats.processing }}</span>
+        <span class="stat-label">Processing</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-num">{{ stats.awaiting_review }}</span>
+        <span class="stat-label">Awaiting Review</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-num">{{ stats.sent }}</span>
+        <span class="stat-label">Sent</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-num">{{ stats.total }}</span>
+        <span class="stat-label">Total</span>
+    </div>
+</div>
+
+<div style="display:flex;gap:1rem">
+    <a href="/inbox" class="btn">View Inbox</a>
+    <a href="/review" class="btn btn-primary">Process Reviews</a>
+</div>
+{% endblock %}

@@ -1,9 +1,16 @@
 project:
   name: email-agent
-  version: '1.0'
-  description: 基于LangGraph的邮件Agent
+  version: '2.0'
+  description: 基于LangGraph的多Agent邮件处理系统
 model:
   provider: tongyi
   chat_model: qwen-plus
   api_key_env: DASHSCOPE_API_KEY
   temperature: 0.2
+agent_loop:
+  poll_interval_seconds: 60
+  max_concurrent_emails: 1
+rag:
+  collection_name: email_kb
+  embedding_model: text-embedding-v2
+  n_results: 5

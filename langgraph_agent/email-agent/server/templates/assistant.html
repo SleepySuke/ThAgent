@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2rem">
+    <h1 style="margin-bottom:0">Assistant</h1>
+    <span style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-dim)">qwen-plus</span>
+</div>
+
+<div id="chat-box">
+    <div hx-get="/api/assistant/summary" hx-trigger="load" hx-swap="innerHTML"
+         style="padding:1rem 1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);font-size:0.88rem;color:var(--text-muted);margin-bottom:1rem">
+    </div>
+
+    <form hx-post="/api/assistant/chat" hx-target="#chat-messages" hx-swap="beforeend"
+          hx-on::after-request="this.reset()">
+        <input type="text" name="message"
+               placeholder="Type a command, e.g. 'show all refund emails from this week'"
+               required>
+        <button type="submit" class="btn btn-primary">Send</button>
+    </form>
+
+    <div id="chat-messages"></div>
+</div>
+{% endblock %}

@@ -1,33 +1,25 @@
-# -*- coding: UTF-8 -*-
-'''
-@Author ：suke
-@Version ：1.0
-@Date ：2026-05-17 13:44:40
-@Description：
-email-agent 入口 — 加载配置、创建模型、编译图、执行完整流程
-'''
+"""
+email-agent 入口 — 四种运行模式:
+  python main.py --test     单封测试 + CLI 审批
+  python main.py --web      FastAPI Web 界面 (http://localhost:8000)
+  python main.py --tui      Textual 终端界面
+  python main.py --daemon   后台 agent-loop 无 UI
+"""
 
 import os
 import sys
 import json
+import asyncio
 
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import Command
+from dotenv import load_dotenv
+load_dotenv()
 
 from model.llm import create_model
-from graph import build_email_agent_graph
+from graph import build_multi_agent_graph
 from utils.config_handler import load_project_config
 
 
-def _build_graph(model):
-    """构建并编译带检查点的图"""
-    checkpointer = InMemorySaver()
-    builder = build_email_agent_graph()
-    return builder.compile(checkpointer=checkpointer)
-
-
 def _make_config(model, thread_id: str = "email-1") -> dict:
-    """构造运行时 config"""
     return {
         "configurable": {
             "thread_id": thread_id,
@@ -40,87 +32,115 @@ def _make_config(model, thread_id: str = "email-1") -> dict:
     }
 
 
-def run_email_agent(thread_id: str = "email-1", test_mode: bool = False):
-    """执行 email agent 完整流程，处理人工审核中断"""
-    project_config = load_project_config()
-    model = create_model(project_config)
-    graph = _build_graph(model)
-    config = _make_config(model, thread_id)
+async def run_test_mode(model):
+    """单封测试 + CLI 交互审批"""
+    from langgraph.checkpoint.memory import InMemorySaver
+    from loop.hitl_handler import process_email_with_hitl, ReviewMode
 
-    if test_mode:
-        initial_state = {
-            "email_id": "test-1",
-            "sender_email": "test@example.com",
-            "email_subject": "兰州天气咨询",
-            "email_content": "请问兰州明天天气怎么样？我计划去旅游，想知道需要带什么衣服。",
-        }
-        result = _run_with_interrupt(graph, config, initial_state)
-        if result:
-            print(json.dumps(_summarize(result), ensure_ascii=False, indent=2))
-        return result
+    compiled = build_multi_agent_graph(model).compile(
+        checkpointer=InMemorySaver()
+    )
+    config = _make_config(model, "test-single")
 
-    initial_state = {}
-    result = _run_with_interrupt(graph, config, initial_state)
+    initial_state = {
+        "email_id": "test-1",
+        "sender_email": "test@example.com",
+        "email_subject": "退款咨询",
+        "email_content": "你好，我上周购买了你们的产品，现在想申请退款，请问退款流程是怎样的？",
+        "remaining_steps": 30,
+    }
+
+    print("=" * 60)
+    print("Multi-Agent Email Agent — Test Mode (CLI)")
+    print("=" * 60)
+
+    result = await process_email_with_hitl(
+        compiled, config, initial_state, mode=ReviewMode.CLI,
+    )
     if result:
+        print("\n" + "=" * 60)
+        print("Final Result")
+        print("=" * 60)
         print(json.dumps(_summarize(result), ensure_ascii=False, indent=2))
 
 
-def _run_with_interrupt(graph, config, initial_state):
-    """执行图并循环处理中断，直到流程结束"""
-    result = graph.invoke(initial_state, config)
-
-    if not initial_state and result is None:
-        print("没有新邮件")
-        return None
-
-    while True:
-        state = graph.get_state(config)
-        if not state.interrupts:
-            return result
-
-        interrupt_data = state.interrupts[0].value
-        _handle_interrupt(graph, config, interrupt_data)
-
-        # 继续执行剩余流程
-        result = graph.get_state(config).values
-
-    return result
+async def run_web_mode():
+    """FastAPI Web 界面"""
+    from server.app import create_app
+    app = create_app()
+    import uvicorn
+    config = uvicorn.Config(app, host="0.0.0.0", port=8000, log_level="info")
+    server = uvicorn.Server(config)
+    await server.serve()
 
 
-def _handle_interrupt(graph, config, interrupt_data: dict):
-    """处理人工审核中断 — 交互式审批"""
-    print("\n" + "=" * 60)
-    print("⚠️  需要人工审核")
-    print("=" * 60)
+async def run_tui_mode():
+    """Textual 终端界面 + 后台 IMAP 轮询"""
+    import asyncio, os
+    from dotenv import load_dotenv
+    load_dotenv()
 
-    stage = interrupt_data.get("stage", "unknown")
-    if stage == "draft_review":
-        print(f"发件人: {interrupt_data.get('sender', 'N/A')}")
-        print(f"主题: {interrupt_data.get('subject', 'N/A')}")
-        print(f"\n草稿内容:\n{interrupt_data.get('draft', 'N/A')}")
-        print("\n操作: [a]pprove 通过 / [r]evise 打回重写 / [e]dit 编辑后通过")
-        choice = input("> ").strip().lower()
+    from persistence.connection import init_db, get_pool
+    from rag.chroma_client import ensure_kb_initialized
+    from langgraph.checkpoint.mysql.aio import AIOMySQLSaver
 
-        if choice == "r":
-            reason = input("打回原因: ")
-            graph.invoke(Command(resume={"status": "needs_revision", "reason": reason}), config)
-        elif choice == "e":
-            edited = input("修改后内容: ")
-            graph.invoke(Command(resume={"status": "approved", "edited_draft": edited}), config)
-        else:
-            graph.invoke(Command(resume={"status": "approved"}), config)
-    elif stage == "manual_process":
-        print(f"发件人: {interrupt_data.get('sender', 'N/A')}")
-        print(f"内容: {interrupt_data.get('content', 'N/A')[:500]}")
-        print("\n请提供处理意见:")
-        instruction = input("> ")
-        graph.invoke(Command(resume={"instruction": instruction}), config)
+    await init_db()
+    ensure_kb_initialized()
 
-    print("✓ 审核完成，继续执行...\n")
+    project_config = load_project_config()
+    model = create_model(project_config)
+    pool = await get_pool()
+    checkpointer = AIOMySQLSaver(conn=pool)
+    compiled = build_multi_agent_graph(model).compile(checkpointer=checkpointer)
+
+    email_queue: asyncio.Queue = asyncio.Queue()
+
+    imap_cfg = {
+        "imap_server": os.getenv("IMAP_SERVER", "imap.163.com"),
+        "smtp_server": os.getenv("SMTP_SERVER", "smtp.163.com"),
+        "email_address": os.getenv("EMAIL_ADDRESS", ""),
+        "auth_code": os.getenv("EMAIL_AUTH_CODE", ""),
+    }
+
+    # 启动后台邮件处理链路
+    from loop.engine import run_imap_poller, run_consumer
+    poller_task = asyncio.create_task(run_imap_poller(email_queue, interval=60))
+    consumer_task = asyncio.create_task(run_consumer(compiled, model, imap_cfg, email_queue))
+
+    from tui.app import EmailAgentTUI
+    app = EmailAgentTUI()
+
+    try:
+        await app.run_async()
+    finally:
+        poller_task.cancel()
+        consumer_task.cancel()
+        await asyncio.gather(poller_task, consumer_task, return_exceptions=True)
+        from persistence.connection import close_pool
+        await close_pool()
+
+
+async def run_daemon_mode(model):
+    """后台 agent-loop，无 UI"""
+    from langgraph.checkpoint.memory import InMemorySaver
+    from loop.agent_loop import EmailAgentLoop
+    from rag.chroma_client import ensure_kb_initialized
+
+    ensure_kb_initialized()
+    compiled = build_multi_agent_graph(model).compile(
+        checkpointer=InMemorySaver()
+    )
+    poll_interval = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
+    agent_loop = EmailAgentLoop(compiled, _make_config, poll_interval)
+
+    try:
+        await agent_loop.start()
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+        await agent_loop.shutdown()
 
 
 def _summarize(state: dict) -> dict:
-    """提取关键字段用于输出"""
     classification = state.get("classification") or {}
     return {
         "email_id": state.get("email_id"),
@@ -130,14 +150,26 @@ def _summarize(state: dict) -> dict:
         "urgency": classification.get("urgency"),
         "topic": classification.get("topic"),
         "confidence": classification.get("confidence"),
-        "draft_response": state.get("draft_response", "")[:200],
+        "draft_response": (state.get("draft_response") or "")[:200],
         "review_status": state.get("review_status"),
         "send_status": state.get("send_status"),
     }
 
 
+def main():
+    if "--web" in sys.argv:
+        asyncio.run(run_web_mode())
+    elif "--tui" in sys.argv:
+        asyncio.run(run_tui_mode())
+    elif "--test" in sys.argv:
+        project_config = load_project_config()
+        model = create_model(project_config)
+        asyncio.run(run_test_mode(model))
+    else:
+        project_config = load_project_config()
+        model = create_model(project_config)
+        asyncio.run(run_daemon_mode(model))
+
+
 if __name__ == "__main__":
-    test_mode = "--test" in sys.argv
-    args = [a for a in sys.argv[1:] if a != "--test"]
-    thread_id = args[0] if args else "email-1"
-    run_email_agent(thread_id, test_mode=test_mode)
+    main()
