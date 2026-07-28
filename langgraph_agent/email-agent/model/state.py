@@ -33,4 +33,9 @@ class EmailAgentState(TypedDict):
     draft_response: str | None
     review_status: Literal["approved", "needs_revision", "pending_draft"] | None
     send_status: str | None
+    kb_results: list[dict] | None
+    bug_results: list[dict] | None
+    supervisor_decision: str | None
+    supervisor_reasoning: str | None
+    remaining_steps: int
     messages: Annotated[list, add_messages]

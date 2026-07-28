@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} &mdash; Email Agent</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+    <nav>
+        <a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a>
+        <a href="/inbox" class="{% if request.url.path == '/inbox' %}active{% endif %}">Inbox</a>
+        <a href="/review" class="{% if request.url.path == '/review' %}active{% endif %}">Review</a>
+        <a href="/assistant" class="{% if request.url.path == '/assistant' %}active{% endif %}">Assistant</a>
+    </nav>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

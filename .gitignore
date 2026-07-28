@@ -29,3 +29,5 @@ financial/.env.example/
 
 # 日志
 logs/
+docs/
+chroma_data/

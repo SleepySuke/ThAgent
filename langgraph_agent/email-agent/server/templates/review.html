@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2rem">
+    <h1 style="margin-bottom:0">Review Queue</h1>
+    <span style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-dim)">{{ pending|length }} pending</span>
+</div>
+
+{% for item in pending %}
+<div class="review-card" id="review-{{ item.thread_id }}">
+    <div class="review-header">
+        <strong>{{ item.sender_email }}</strong>
+        <span>&mdash; {{ item.email_subject }}</span>
+    </div>
+    <div class="review-draft"><pre>{{ item.draft_response }}</pre></div>
+    <div class="review-actions">
+        <button class="btn-approve"
+                hx-post="/api/reviews/{{ item.thread_id }}/approve"
+                hx-target="#review-{{ item.thread_id }}"
+                hx-swap="outerHTML">Approve</button>
+
+        <form hx-post="/api/reviews/{{ item.thread_id }}/reject"
+              hx-target="#review-{{ item.thread_id }}" hx-swap="outerHTML"
+              style="display:flex;gap:0.5rem;align-items:center">
+            <input type="text" name="reason" placeholder="Rejection reason" required>
+            <button type="submit" class="btn-reject">Reject</button>
+        </form>
+
+        <form hx-post="/api/reviews/{{ item.thread_id }}/edit"
+              hx-target="#review-{{ item.thread_id }}" hx-swap="outerHTML"
+              style="display:flex;gap:0.5rem;align-items:flex-start">
+            <textarea name="edited_draft" rows="2" placeholder="Edit draft content">{{ item.draft_response }}</textarea>
+            <button type="submit" class="btn-edit">Edit & Approve</button>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="empty-state">
+    <p>No pending reviews. All drafts have been processed.</p>
+</div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2rem">
+    <h1 style="margin-bottom:0">Inbox</h1>
+    <span style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-dim)">{{ emails|length }} messages</span>
+</div>
+
+<div class="filter-bar">
+    <a href="/inbox" class="{% if not current_status %}active{% endif %}">All</a>
+    <a href="/inbox?status=pending" class="{% if current_status == 'pending' %}active{% endif %}">Pending</a>
+    <a href="/inbox?status=processing" class="{% if current_status == 'processing' %}active{% endif %}">Processing</a>
+    <a href="/inbox?status=awaiting_review" class="{% if current_status == 'awaiting_review' %}active{% endif %}">Awaiting Review</a>
+    <a href="/inbox?status=sent" class="{% if current_status == 'sent' %}active{% endif %}">Sent</a>
+    <a href="/inbox?status=failed" class="{% if current_status == 'failed' %}active{% endif %}">Failed</a>
+</div>
+
+<table class="email-table">
+    <thead>
+        <tr>
+            <th>From</th>
+            <th>Subject</th>
+            <th>Status</th>
+            <th>Date</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for email in emails %}
+    <tr>
+        <td>{{ email.sender_email or '&mdash;' }}</td>
+        <td>{{ email.email_subject or '&mdash;' }}</td>
+        <td><span class="status-{{ email.status }}">{{ email.status }}</span></td>
+        <td style="font-family:var(--font-mono);font-size:0.78rem;color:var(--text-dim)">{{ email.created_at or '&mdash;' }}</td>
+    </tr>
+    {% else %}
+    <tr>
+        <td colspan="4">
+            <div class="empty-state">
+                <p>No emails found. New messages will appear here once the agent processes them.</p>
+            </div>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

@@ -33,10 +33,25 @@ class ModelConfig(BaseModel):
     temperature: float = Field(default=0.2, ge=0, le=2)
 
 
+class AgentLoopConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    poll_interval_seconds: int = Field(default=60, ge=10)
+    max_concurrent_emails: int = Field(default=1, ge=1)
+
+
+class RagConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    collection_name: str = Field(default="email_kb")
+    embedding_model: str = Field(default="text-embedding-v2")
+    n_results: int = Field(default=5, ge=1, le=20)
+
+
 class ProjectConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     project: ProjectInfo
     model: ModelConfig
+    agent_loop: AgentLoopConfig | None = None
+    rag: RagConfig | None = None
 
 
 def load_project_config(config_path: str | None = None) -> ProjectConfig:

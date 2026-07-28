@@ -1,10 +1,15 @@
-# LangChain 核心
+# LangChain & LangGraph 核心
 langchain-core
 langchain-community
 langchain
+langgraph
+langgraph-prebuilt
 
-# 文档加载器依赖
-jq
+# 配置与状态
+pyyaml
+python-dotenv
+pydantic
+pydantic-settings
 
 # 通义千问集成
 dashscope
@@ -12,14 +17,30 @@ dashscope
 # OpenAI SDK
 openai
 
-# PyPDFLoader 依赖
+# 文档加载器依赖
+jq
 pypdf
 
-# 本地向量化数据存储
+# 向量数据库
 Chroma
 langchain_chroma
-# 文件上传--WEB页面
-streamlit
 
-# 测试夹具
+# MySQL 持久化 (Phase 7)
+langgraph-checkpoint-mysql
+aiomysql
+SQLAlchemy
+
+# Web 框架
+fastapi
+uvicorn
+jinja2
+
+# TUI 终端界面
+textual
+
+# 异步支持
+aiohttp
+httpx
+
+# 测试
 pytest
