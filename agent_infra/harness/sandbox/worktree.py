@@ -5,6 +5,8 @@ runtime 提供 CPU/内存硬限制，SandboxSession 接口不变。
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
 import subprocess
 from pathlib import Path
@@ -45,7 +47,7 @@ class WorktreeSession:
         return p
 
     # ---- SandboxSession 协议 ----
-    def run(self, cmd: list[str]) -> CmdResult:
+    async def run(self, cmd: list[str]) -> CmdResult:
         # ponytail: exact-N 契约——max_total_cmds=N 允许恰好 N 条，第 N+1 条抛错
         if self._cmd_count >= self._limits.max_total_cmds:
             raise SandboxLimitError(
@@ -55,15 +57,32 @@ class WorktreeSession:
             return CmdResult(cmd=cmd, exit_code=126, stdout="",
                              stderr=f"command not allowed: {head}")
         self._cmd_count += 1
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, cwd=self.worktree,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         try:
-            r = subprocess.run(cmd, cwd=self.worktree, capture_output=True,
-                               text=True, timeout=self._limits.timeout_s,
-                               check=False)  # 退出码是 CmdResult 的数据
-            out, err, rc, truncated = r.stdout, r.stderr, r.returncode, False
-        except subprocess.TimeoutExpired as e:
-            out = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+            out_b, err_b = await asyncio.wait_for(
+                proc.communicate(), self._limits.timeout_s)
+            out, err, rc, truncated = (
+                out_b.decode(errors="replace"), err_b.decode(errors="replace"),
+                proc.returncode, False)
+        except TimeoutError:
+            # 矩阵 #14：wait_for 只取消 communicate，不杀子进程——显式 kill
+            #（竞态容错：超时瞬间子进程恰好自行退出时 kill 抛 LookupError，
+            # 吞掉保 124 形态不丢）
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            out_b, _ = await proc.communicate()  # 收尸防僵尸，取残余 stdout
+            out = out_b.decode(errors="replace")
             err = "sandbox: command timed out"
             rc, truncated = 124, True
+        except asyncio.CancelledError:
+            # 调用方 cancel（engine pause/shutdown）同样不留孤儿；kill 抛错
+            # 不得顶掉 CancelledError（取消语义优先），收尸后 bare raise
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            await proc.wait()
+            raise
         limit = self._limits.max_output_bytes
         return CmdResult(
             cmd=cmd, exit_code=rc,
@@ -88,6 +107,12 @@ class WorktreeSession:
 
     def diff(self) -> str:
         return self._git("diff", "HEAD~1", "HEAD")
+
+    def reset_to_commit(self) -> None:
+        """回 commit 干净态（attempt>1 reset，幂等）：跟踪文件 checkout 覆写
+        + 未跟踪文件 clean。副作用清零 = 沙箱天然回滚。"""
+        self._git("checkout", self._commit, "--", ".")
+        self._git("clean", "-fd")
 
     def snapshot(self, artifacts_dir: Path) -> Artifact:
         artifacts_dir.mkdir(parents=True, exist_ok=True)

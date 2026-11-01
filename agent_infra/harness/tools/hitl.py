@@ -9,11 +9,13 @@ import os
 
 from harness.contract import RunContext
 from harness.hitl import CONFIRM_PHRASE, REGISTRY
+from harness.tools._base import _SPECS, _wrap
 
 HEARTBEAT_S = 20.0
 
 
 def request_human(run: RunContext, session) -> callable:
+    @_wrap(_SPECS["request_human"])  # hitl 无 deadline：等人语义（REGISTRY 心跳兜底）
     async def request_human(question: str) -> str:
         """向人工请求补充信息（HITL）。仅在关键信息缺失且现有工具拿不到时使用。
 

@@ -94,14 +94,8 @@ class SandboxManager:
                                capture_output=True, check=False)
 
     def reset(self, run_id: str, spec: SandboxSpec) -> None:
-        """attempt>1 沙箱回 commit 干净态（副作用清零，沙箱=天然回滚）。
-
-        # ponytail: 借 session._git 直落 checkout/clean；Task 3 的
-        # worktree.reset_to_commit 落地后收编为显式方法
-        """
-        session = self.get(run_id, spec)
-        session._git("checkout", spec.commit, "--", ".")
-        session._git("clean", "-fd")
+        """attempt>1 沙箱回 commit 干净态（副作用清零，沙箱=天然回滚）。"""
+        self.get(run_id, spec).reset_to_commit()
 
     def shutdown(self, run_id: str) -> Artifact | None:
         session = self._sessions.pop(run_id, None)

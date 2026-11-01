@@ -34,6 +34,7 @@ class AgentInput:
     hitl_feedback: dict | None = None                  # 人工回填（一期 feedback）
     upstream: dict = field(default_factory=dict)       # 上游语义结论 {registry 名: output_data}
     idempotency_key: str = ""    # run_id:node_id:attempt（重试幂等，随 task 下发）
+    attempt: int = 1             # 节点尝试轮次（engine 每次尝试前设置，矩阵 #16）
 
     def to_json(self) -> str:
         return json.dumps(dataclasses.asdict(self), ensure_ascii=False)
@@ -69,6 +70,7 @@ class RunContext:
     commit: str
     artifacts_dir: str = ""  # 本 run 的 artifacts 目录（read_artifact 用）
     node_id: str = ""          # 当前节点（A2A server 侧回填，session 寻回用）
+    attempt: int = 1           # 节点尝试轮次（重试轮工具首调用前 reset 沙箱，矩阵 #16）
     event_sink: Callable[[str, dict], None] = field(
         default_factory=lambda: lambda event, payload: None)
 

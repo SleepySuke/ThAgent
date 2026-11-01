@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.tools._base import _guard
+from harness.tools._base import _SPECS, _wrap
 
 
 def read_artifact(run, session):
-    @_guard
-    def read_artifact(path: str) -> dict:
+    @_wrap(_SPECS["read_artifact"])
+    async def read_artifact(path: str) -> dict:
         """读取本 run 的 artifacts 目录下文件（如上游产出的 cr_report.json）。
 
         path 为相对 artifacts 目录的路径；artifacts 目录在 worktree 之外

@@ -527,9 +527,11 @@ class HarnessEngine:
         budget = _NodeBudget(timeout_s)
         try:
             for attempt in range(1, policy.max_attempts + 1):
-                # 幂等键随 task 下发：重试不重复副作用
+                # 幂等键随 task 下发：重试不重复副作用；attempt 随行——
+                # agent 侧工具首调用前据此 reset 沙箱（矩阵 #16）
                 agent_input.idempotency_key = idempotency_key(
                     agent_input.run_id, agent_input.node_id, attempt)
+                agent_input.attempt = attempt
                 try:
                     send_task = asyncio.create_task(
                         self._send(url, agent_input, tracer, task_id_box,

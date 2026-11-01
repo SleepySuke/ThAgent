@@ -416,6 +416,7 @@ class A2AAgentExecutor(AgentExecutor):
                          commit=payload["commit"],
                          artifacts_dir=str(self._runs_root / trace_id / "artifacts"),
                          node_id=agent_input.get("node_id", ""),
+                         attempt=agent_input.get("attempt", 1),
                          event_sink=sink)
         drain = asyncio.create_task(self._drain(q, updater))
         flushed = False
