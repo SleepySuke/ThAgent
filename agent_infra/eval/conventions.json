@@ -1,0 +1,9 @@
+[
+  {
+    "id": "conv-discount-cap",
+    "kind": "team_convention",
+    "text": "本仓库约定：折扣率上限 20%（任何阶梯/促销折扣 rate ≤ 0.20），防止大促叠加导致亏本；新增更高折扣档必须经运营审批",
+    "tags": ["discount", "rate", "promo"],
+    "repo": null
+  }
+]
