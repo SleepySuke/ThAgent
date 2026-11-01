@@ -1,0 +1,77 @@
+{
+  "generated_at": "2026-10-14T18:07:47",
+  "source": "online:bench",
+  "metrics": {
+    "n_defects": 5,
+    "per_defect": {
+      "defect-1": {
+        "legality": 1.0,
+        "must_use_hit": 1.0,
+        "cr_hit": 1.0,
+        "verdict_ok": true,
+        "plan_match": 1.0,
+        "test_cover": 1.0,
+        "e2e_done": true
+      },
+      "defect-2": {
+        "legality": 0.972972972972973,
+        "must_use_hit": 1.0,
+        "cr_hit": 1.0,
+        "verdict_ok": true,
+        "plan_match": 0.7777777777777778,
+        "test_cover": 1.0,
+        "e2e_done": true
+      },
+      "defect-3": {
+        "legality": 1.0,
+        "must_use_hit": 1.0,
+        "cr_hit": 1.0,
+        "verdict_ok": true,
+        "plan_match": 1.0,
+        "test_cover": 1.0,
+        "e2e_done": true
+      },
+      "defect-4": {
+        "legality": 1.0,
+        "must_use_hit": 0.5,
+        "cr_hit": 1.0,
+        "verdict_ok": false,
+        "plan_match": 1.0,
+        "test_cover": 0.0,
+        "e2e_done": false
+      },
+      "defect-5": {
+        "legality": 1.0,
+        "must_use_hit": 1.0,
+        "cr_hit": 1.0,
+        "verdict_ok": true,
+        "plan_match": 1.0,
+        "test_cover": 1.0,
+        "e2e_done": true
+      }
+    },
+    "tool_calling": {
+      "legality": 0.9946,
+      "must_use_hit": 0.9,
+      "denied": 1,
+      "tool_calls": 148,
+      "turns_per_node": {
+        "case_agent": 3.2,
+        "change_report_agent": 2.8,
+        "cr_agent": 6.4,
+        "report_agent": 2.5,
+        "requirement_agent": 3.0,
+        "script_agent": 5.8,
+        "strategy_agent": 3.0,
+        "test_recall_agent": 4.0
+      }
+    },
+    "task_completion": {
+      "cr_hit": 1.0,
+      "verdict_ok": 0.8,
+      "plan_match": 0.9555555555555555,
+      "test_cover": 0.8,
+      "e2e_done": 0.8
+    }
+  }
+}
