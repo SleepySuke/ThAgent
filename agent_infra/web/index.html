@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Agent Infra · CR Harness</title>
+<style>
+  :root { --line:#ddd; --ok:#e8f5e9; --bad:#ffebee; --run:#e3f2fd; --dim:#999; }
+  body { font-family:-apple-system,sans-serif; margin:0; display:flex; height:100vh; }
+  #left { width:300px; border-right:1px solid var(--line); padding:14px;
+          overflow-y:auto; flex-shrink:0; }
+  #mid { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #right { width:320px; border-left:1px solid var(--line); padding:14px;
+           overflow-y:auto; flex-shrink:0; }
+  .card { border:1px solid #eee; border-radius:8px; padding:10px; margin-bottom:10px; }
+  .tag { font-family:monospace; font-weight:600; }
+  select,input,textarea,button { font:inherit; }
+  textarea { width:100%; box-sizing:border-box; border:1px solid var(--line);
+             border-radius:6px; padding:6px; }
+  button { border:1px solid var(--line); border-radius:6px; padding:6px 14px;
+           cursor:pointer; background:#fff; }
+  button.primary { background:#2563eb; color:#fff; border-color:#2563eb; }
+  #runbar { padding:10px 16px; border-bottom:1px solid var(--line);
+            font-family:monospace; font-size:13px; display:flex; gap:10px;
+            align-items:center; }
+  .pill { padding:2px 10px; border-radius:99px; font-size:12px;
+          background:var(--run); }
+  .pill.ok { background:var(--ok); } .pill.failed { background:var(--bad); }
+  #chat { flex:1; overflow-y:auto; padding:14px 18px; }
+  .turn { border-left:3px solid #2563eb; padding:8px 12px; margin:10px 0;
+          border-radius:0 8px 8px 0; background:#fafafa; }
+  .turn .who { font-family:monospace; font-size:12px; color:#555;
+               display:flex; gap:8px; align-items:center; }
+  .think { font-size:13px; margin:6px 0; white-space:pre-wrap; }
+  .think.th { color:#888; font-style:italic; }
+  .think.open::after { content:'▌'; color:#2563eb; animation:blink 1s infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  .tool { font-family:monospace; font-size:12px; padding:4px 8px; margin:4px 0;
+          border:1px solid #eee; border-radius:6px; background:#fff; }
+  .tool .st { float:right; color:var(--dim); }
+  details { margin:4px 0; } summary { cursor:pointer; font-size:12px;
+            font-family:monospace; }
+  pre { background:#f4f4f4; padding:8px; border-radius:4px; font-size:12px;
+        white-space:pre-wrap; overflow-x:auto; }
+  .issue { border-left:4px solid #ef4444; padding:6px 10px; margin:6px 0;
+           background:#fff; border-radius:0 6px 6px 0; }
+  .issue.mid { border-color:#f59e0b; } .issue.low { border-color:#6b7280; }
+  .art-title { font-family:monospace; font-weight:600; font-size:13px;
+               margin:8px 0 4px; }
+  .paused-item { cursor:pointer; } .paused-item:hover { background:#f6f6ff; }
+  #dagwrap { overflow:auto; }
+</style>
+</head>
+<body>
+<div id="left">
+  <div class="card">
+    <b>提交分析</b><br><br>
+    <select id="commit" style="width:100%"></select><br><br>
+    <textarea id="note" rows="2" placeholder="补充备注（可选，随请求注入）"></textarea>
+    <br><br>
+    <button class="primary" style="width:100%" onclick="submitRun()">开始分析</button>
+  </div>
+  <div class="card" id="paused-card" style="display:none">
+    <b>挂起任务</b><div id="paused-list"></div>
+  </div>
+  <div class="card"><b>能力图（死 DAG）</b>
+    <div id="dagwrap"><svg id="dag" width="260" height="640"></svg></div>
+  </div>
+</div>
+<div id="mid">
+  <div id="runbar"><span id="run-title">选择 commit 开始</span>
+    <span class="pill" id="run-state" style="display:none"></span>
+    <button id="btn-pause" style="display:none" onclick="doPause()">暂停</button>
+    <button id="btn-resume" style="display:none" onclick="doResume()">继续</button></div>
+  <div id="chat"><div id="turns"></div></div>
+  <div style="display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--line)">
+    <input id="chat-input" style="flex:1;border:1px solid var(--line);border-radius:6px;padding:6px"
+           placeholder="或直接对话：继续 / 重新分析 …" onkeydown="if(event.key==='Enter')sendChat()">
+    <button class="primary" onclick="sendChat()">发送</button></div>
+</div>
+<div id="right">
+  <h3>产物</h3><div id="artifacts"><small style="color:#999">暂无</small></div>
+  <h3>评测</h3>
+  <button onclick="runEval()">跑评测</button><pre id="eval"></pre>
+</div>
+<script>
+let traceId = null, es = null, dagData = null, planAgents = null;
+const nodeState = {}, turns = {}, nodeAgent = {};
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// plan 节点 id（cr/execute）→ registry id（cr_agent/case_executor），DAG 着色与回合块统一用后者
+const dagId = id => nodeAgent[id] || id;
+
+async function loadCommits() {
+  const cs = await (await fetch('/commits')).json();
+  document.getElementById('commit').innerHTML = cs.map(c =>
+    `<option value="${c.tag}">${c.tag} · ${esc(c.subject)}</option>`).join('');
+}
+
+function submitRun() {
+  const commit = document.getElementById('commit').value;
+  const note = document.getElementById('note').value;
+  fetch('/runs', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({commit, context_note: note})})
+    .then(r => r.json()).then(({trace_id}) => startWatch(trace_id, commit));
+}
+
+function startWatch(tid, label) {
+  traceId = tid;
+  document.getElementById('run-title').textContent = `${label} · ${tid.slice(0,8)}`;
+  document.getElementById('turns').innerHTML = '';
+  Object.keys(turns).forEach(k => delete turns[k]);
+  setPill('RUNNING', ''); showResume(false);
+  if (es) es.close();
+  es = new EventSource(`/runs/${tid}/stream`);
+  es.addEventListener('trace', e => onTrace(JSON.parse(e.data)));
+  // run_end 以 event: end 下发（不再走 trace 通道），状态从其 data 里取
+  es.addEventListener('end', e => {
+    const p = (JSON.parse(e.data).payload) || {};
+    es.close(); es = null;
+    dismissHitlCard();  // run 已结束：遗留的 HITL 卡作废，别让用户对着 404 干等
+    setPill(p.status === 'ok' ? 'OK' : 'FAILED', p.status === 'ok' ? 'ok' : 'failed');
+    ['btn-pause','btn-resume'].forEach(id =>
+      document.getElementById(id).style.display = 'none');  // run 已结束：都收起
+    finalize();
+  });
+  // 崩溃 run 永远没有 end 事件：断线时查一次状态，failed 就把错误亮出来，
+  // 否则 UI 停在 RUNNING 干等（EventSource 会一直空重连）
+  es.onerror = async () => {
+    try {
+      const st = await (await fetch(`/runs/${tid}`)).json();
+      if (st.status === 'failed') {
+        es.close(); es = null;
+        dismissHitlCard();
+        setPill('FAILED', 'failed');
+        const body = turnEl('engine').querySelector('.body');
+        body.innerHTML = `<span style="color:#e5734f">运行失败: ${esc((st.error || 'see error.txt').split('\\n')[0])}</span>`;
+      }
+    } catch (_) { /* 服务器重启中：交给 EventSource 重连 */ }
+  };
+}
+
+function setPill(text, cls) {
+  const p = document.getElementById('run-state');
+  p.style.display = 'inline-block'; p.textContent = text; p.className = 'pill ' + cls;
+}
+
+/* ---------- DAG（提交即渲染候选全集，plan_ready 高亮子集） ---------- */
+async function loadDag() {
+  try {
+    const r = await fetch('/dag');
+    if (!r.ok) throw new Error('/dag ' + r.status);
+    dagData = await r.json();
+    renderDag();
+  } catch (e) {
+    // 典型场景：web 进程是旧代码（没有 /dag 路由）——重启 make dev
+    document.getElementById('dag').innerHTML =
+      `<text x="10" y="30" fill="#e33" font-size="11">DAG 接口不可用(${e.message})</text>`;
+  }
+}
+function renderDag() {
+  if (!dagData) return;
+  const indeg = {}; dagData.nodes.forEach(n => indeg[n.id] = 0);
+  dagData.edges.forEach(e => indeg[e.to]++);
+  const layers = [];
+  let cur = dagData.nodes.filter(n => !indeg[n.id]).map(n => n.id);
+  const seen = new Set(cur);
+  while (cur.length) {
+    layers.push(cur);
+    const next = [];
+    dagData.edges.filter(e => cur.includes(e.from)).forEach(e => {
+      if (!seen.has(e.to)) { next.push(e.to); seen.add(e.to); }
+    });
+    cur = next;
+  }
+  (layers[layers.length-1]||[]).length || layers.pop();
+  const W = 250, ROW = 46;
+  const pos = {};
+  layers.forEach((layer, li) => layer.forEach((id, ci) => {
+    pos[id] = {x: 20 + ci*120 > W-90 ? W-90 : 20 + ci*120, y: 14 + li*ROW*2};
+  }));
+  const H = 14 + layers.length*ROW*2;
+  document.getElementById('dag').setAttribute('height', H);
+  let svg = '';
+  dagData.edges.forEach(e => {
+    const a = pos[e.from], b = pos[e.to]; if (!a || !b) return;
+    svg += `<path d="M${a.x+35},${a.y+16} C${a.x+35},${a.y+34} ${b.x},${b.y-16} ${b.x+2},${b.y-2}"
+      fill="none" stroke="#bbb" stroke-dasharray="${planAgents && planAgents.includes(e.from) && planAgents.includes(e.to) ? '' : '3,3'}"/>`;
+  });
+  dagData.nodes.forEach(n => {
+    const p = pos[n.id]; const st = nodeState[n.id] || '';
+    const sel = planAgents && planAgents.includes(n.id);
+    const fill = st==='ok' ? 'var(--ok)' : st==='failed'||st==='timeout' ? 'var(--bad)'
+      : st==='running' ? 'var(--run)' : (sel ? '#eef4ff' : '#f6f6f6');
+    svg += `<g><rect x="${p.x}" y="${p.y}" width="70" height="32" rx="7"
+      fill="${fill}" stroke="${sel ? '#2563eb' : '#ccc'}" stroke-width="${sel?2:1}"/>
+      <text x="${p.x+35}" y="${p.y+15}" text-anchor="middle" font-size="9"
+      font-family="monospace" fill="${sel?'#2563eb':'#666'}">${n.id.replace('_agent','').replace('_',' ')}</text>
+      <text x="${p.x+35}" y="${p.y+26}" text-anchor="middle" font-size="8" fill="#999">${n.type==='program'?'⚙':'🤖'}${st?(' '+st):''}</text></g>`;
+  });
+  document.getElementById('dag').innerHTML = svg;
+}
+
+/* ---------- 对话流（回合块 + 打字机 + 工具条） ---------- */
+function turnEl(nodeId) {
+  if (!turns[nodeId]) {
+    const div = document.createElement('div');
+    div.className = 'turn';
+    div.innerHTML = `<div class="who"><b>${esc(nodeId)}</b> <span class="st"></span></div>
+      <div class="body"></div>`;
+    document.getElementById('turns').appendChild(div);
+    turns[nodeId] = div;
+  }
+  return turns[nodeId];
+}
+const typeQueue = {};
+function typeInto(nodeId, text, thought) {
+  const el = turnEl(nodeId).querySelector('.body');
+  const list = el.querySelectorAll('.think');
+  let line = list[list.length - 1];
+  if (!line || line.dataset.th !== String(thought) || !line.classList.contains('open')) {
+    line = document.createElement('div');
+    line.className = 'think open' + (thought ? ' th' : '');
+    line.dataset.th = String(thought);
+    el.appendChild(line);
+  }
+  (typeQueue[nodeId] = typeQueue[nodeId] || []).push({line, text});
+  pump(nodeId);
+}
+function pump(nodeId) {
+  const q = typeQueue[nodeId] || [];
+  if (!q.length) return;
+  if (pump.busy === undefined) pump.busy = {};
+  if (pump.busy[nodeId]) return;
+  pump.busy[nodeId] = true;
+  const tick = () => {
+    const item = q.shift();
+    if (!item) { pump.busy[nodeId] = false; return; }
+    item.line.textContent += item.text;   // 光标是 .open::after，整段追加即打字机
+    setTimeout(tick, 16);
+  };
+  tick();
+}
+function sealTyping(nodeId) {
+  (typeQueue[nodeId] || []).forEach(({line}) => line.classList.remove('open'));
+  const q = typeQueue[nodeId]; if (q) q.length = 0;
+}
+function addToolRow(nodeId, name, callId) {
+  const body = turnEl(nodeId).querySelector('.body');
+  const div = document.createElement('div');
+  div.className = 'tool'; div.dataset.cid = callId || name;
+  div.innerHTML = `🔧 ${esc(name)} <span class="st">…</span>`;
+  body.appendChild(div);
+  return div;
+}
+
+/* ---------- 事件路由 ---------- */
+function onTrace(e) {
+  const ev = e.event, p = e.payload || {}, nd = dagId(e.node_id) || agentOfNode(e);
+  switch (ev) {
+    case 'plan_ready':
+      planAgents = (p.nodes || []).map(n => n.agent || n.id);
+      (p.nodes || []).forEach(n => { nodeAgent[n.id] = n.agent || n.id; });
+      renderDag(); break;
+    case 'node_start':
+      lastNode = p.node_id || e.node_id || nd;
+      nodeState[nd] = 'running'; renderDag();
+      turnEl(nd).querySelector('.st').textContent = 'running'; break;
+    case 'llm_delta': typeInto(nd, p.text || '', !!p.thought); break;
+    case 'llm_call': sealTyping(nd); break;
+    case 'tool_call': {
+      const row = addToolRow(nd, p.tool, p.call_id);
+      if (p.tool === 'request_human') hitlCard(nd, p.args || {});
+      row.querySelector('.st').textContent = '…'; break;
+    }
+    case 'tool_result': {
+      const rows = turns[nd] ? turns[nd].querySelectorAll('.tool') : [];
+      const row = [...rows].reverse().find(r => (p.call_id && r.dataset.cid === p.call_id)
+        || r.textContent.includes(p.tool));
+      // tool_result 无 ok 字段；失败以 error 键落在 result 里——_short() 产的是
+      // Python repr（'error' 单引号），JSON 序列化则是双引号，两种都认
+      if (row) row.querySelector('.st').textContent =
+        /['"]error['"]/.test(p.result || '') ? '✗' : '✓';
+      if (p.tool === 'request_human') dismissHitlCard();
+      break;
+    }
+    case 'hitl_heartbeat': updateHitlWait(); break;
+    case 'node_end':
+      sealTyping(nd);
+      nodeState[nd] = p.status; renderDag();
+      if (turns[nd]) turns[nd].querySelector('.st').textContent = p.status;
+      break;
+    case 'run_paused': setPill('PAUSED', ''); showResume(true); break;
+    case 'run_resumed': setPill('RUNNING', ''); showResume(false); break;
+    case 'run_end':
+      setPill(p.status === 'ok' ? 'OK' : 'FAILED',
+              p.status === 'ok' ? 'ok' : 'failed'); break;
+  }
+  const chat = document.getElementById('chat');
+  if (chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 80) {
+    chat.scrollTop = chat.scrollHeight;   // 贴底才自动滚
+  }
+}
+function agentOfNode(e) {
+  // program/无 node_id 事件归到最近回合；demo 级简化
+  return dagId(lastNode) || lastNode || 'planning_agent';
+}
+let lastNode = null;
+
+/* ---------- 产物 / 评测（沿用原有口径） ---------- */
+async function loadArtifacts() {
+  if (!traceId) return;
+  const arts = await (await fetch(`/runs/${traceId}/artifacts`)).json();
+  const box = document.getElementById('artifacts');
+  if (!arts.length) { box.innerHTML = '<small style="color:#999">暂无</small>'; return; }
+  box.innerHTML = arts.map(a => a.name.endsWith('.json') && a.name.includes('report')
+    ? renderReport(JSON.parse(a.content))
+    : `<details><summary>${esc(a.name)}</summary><pre>${esc(a.content)}</pre></details>`
+  ).join('');
+}
+function renderReport(rep) {
+  const issues = (rep.issues || []).map(i =>
+    `<div class="issue ${esc(i.severity||'')}"><b>${esc(i.severity||'')} · ${esc(i.type||'')}</b>
+     <span style="font-family:monospace;font-size:11px"> ${esc(i.file)}:${i.line||'?'}</span>
+     <div style="font-size:12px">${esc(i.desc||'')}</div></div>`).join('');
+  return `<div class="art-title">cr_report · ${esc(rep.verdict||'')}</div>${issues}`;
+}
+async function finalize() { await loadArtifacts(); }
+async function runEval() {
+  document.getElementById('eval').textContent = 'running...';
+  const {eval_id} = await (await fetch('/eval', {method:'POST'})).json();
+  const t = setInterval(async () => {
+    const r = await fetch(`/eval/${eval_id}`);
+    if (r.status === 200) {
+      const s = await r.json();
+      document.getElementById('eval').textContent =
+        `hit_rate=${s.total_hit_rate} fp=${s.total_false_positives} verdict=${s.verdict_accuracy}`;
+      clearInterval(t);
+    }
+  }, 2000);
+}
+
+/* ---------- HITL 卡 / 等待指示 ---------- */
+let hitlSince = null;
+function hitlCard(nodeId, args) {
+  dismissHitlCard();
+  hitlSince = Date.now();
+  const div = document.createElement('div');
+  div.id = 'hitl-card'; div.className = 'card';
+  div.style.borderColor = '#f59e0b';
+  // ponytail: trace 事件里 args 是 _short() 截断的 Python repr 字符串，不是 dict；原样展示即可
+  const q = typeof args === 'string' ? args : (args.question || '');
+  div.innerHTML = `<b>⏸ ${esc(nodeId)} 请求人工输入</b>
+    <div style="margin:6px 0;font-size:13px">${esc(q)}</div>
+    <textarea id="hitl-text" rows="2"></textarea><br>
+    <button class="primary" onclick="answerHitl()">回答并继续</button>
+    <button onclick="answerHitl(true)">直接继续</button>
+    <div id="hitl-wait" style="color:#999;font-size:12px"></div>`;
+  document.getElementById('chat').appendChild(div);
+}
+function dismissHitlCard() {
+  hitlSince = null;
+  const old = document.getElementById('hitl-card');
+  if (old) old.remove();
+}
+async function answerHitl(empty) {
+  const text = empty ? '' : document.getElementById('hitl-text').value;
+  await fetch(`/runs/${traceId}/hitl`, {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text})});
+}
+function updateHitlWait() {
+  if (!hitlSince) return;
+  const mins = Math.floor((Date.now() - hitlSince) / 60000);
+  document.getElementById('hitl-wait').textContent =
+    `等待人工输入（已等 ${mins} 分钟，无超时）`;
+}
+
+/* ---------- 暂停 / 继续 ---------- */
+async function doPause() {
+  const r = await fetch(`/runs/${traceId}/pause`, {method:'POST'});
+  if (!r.ok || !(await r.json()).paused) return;  // 409 竞态（body 已跑完）→ 如实不显示 PAUSED
+  setPill('PAUSED', ''); showResume(true);
+}
+async function doResume() {
+  const text = prompt('补充上下文（可留空）') || '';
+  const r = await fetch(`/runs/${traceId}/resume`, {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text})});
+  if (!r.ok) return;   // 409 已被恢复/404：SSE 的 run_resumed 会如实刷状态
+  setPill('RUNNING', ''); showResume(false); loadPaused();
+}
+function showResume(b) {
+  document.getElementById('btn-pause').style.display = b ? 'none' : '';
+  document.getElementById('btn-resume').style.display = b ? '' : 'none';
+}
+
+/* ---------- 挂起列表 + 意图输入 ---------- */
+async function loadPaused() {
+  try {
+    const list = await (await fetch('/session/repo:demo_repo/paused')).json();
+    const card = document.getElementById('paused-card');
+    card.style.display = list.length ? '' : 'none';
+    document.getElementById('paused-list').innerHTML = list.map(p =>
+      `<div class="paused-item card" onclick="resumeOne('${p.trace_id}')">
+         ${p.trace_id.slice(0,8)} · 卡在 ${esc(p.current_node || '?')}</div>`).join('');
+  } catch (e) { console.warn('loadPaused failed', e); }  // server 重启期：静默，下个周期重试
+}
+async function resumeOne(tid) {
+  await fetch(`/runs/${tid}/resume`, {method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({text:''})});
+  loadPaused();  // 恢复成功与否以列表刷新为准；切回该 run 视图由用户点选
+}
+async function sendChat() {
+  const q = document.getElementById('chat-input').value;
+  if (!q.trim()) return;
+  const r = await fetch('/session/repo:demo_repo/message', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({query: q})});
+  if (r.status === 409) {           // D5 降级：前端二选一
+    const {candidates} = await r.json();
+    const pick = prompt('是继续挂起任务还是新任务？\n' +
+      candidates.map((c, i) => `${i + 1}) ${c.trace_id} (${c.current_node || '?'})`)
+        .join('\n') +
+      '\n输入序号继续对应任务，留空=新任务') || '';
+    const c = candidates[parseInt(pick, 10) - 1];   // 序号映射回完整 trace_id
+    if (c) await resumeOne(c.trace_id);
+    return;
+  }
+  const out = await r.json();
+  if (out.intent === 'resume') {    // 服务端已恢复：切到该 run 的流看续跑
+    startWatch(out.trace_id, out.trace_id.slice(0,8));
+    setPill('RUNNING', ''); showResume(false);
+  } else if (out.intent === 'new') submitRun();  // demo：新任务按当前下拉提交
+  document.getElementById('chat-input').value = '';
+}
+
+loadCommits(); loadDag(); loadPaused();
+setInterval(loadPaused, 5000);
+</script>
+</body>
+</html>
