@@ -31,3 +31,10 @@ financial/.env.example/
 logs/
 docs/
 chroma_data/
+# agent_infra 本地文档与运行产物（不入库）
+agent_infra/docs/
+agent_infra/runs/
+agent_infra/fixtures/demo_repo/
+
+# agent_infra 种子缺陷仓库（builder 生成物）
+python-agent.code-workspace

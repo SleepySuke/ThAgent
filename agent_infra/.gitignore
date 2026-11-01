@@ -1,0 +1,11 @@
+.superpowers/
+
+# 私人内容：录音/面试复盘/模型对比实验产物/环境备份，不入库（2026-11-01 用户裁定）
+*.m4a
+*面试*.md
+.env.*.bak
+eval/model_compare/
+eval/_cmp_summary.py
+scripts/model_compare.sh
+eval/report.py
+scripts/model_rerun_deepseek.sh
