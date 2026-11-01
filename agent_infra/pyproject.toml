@@ -1,0 +1,45 @@
+[project]
+name = "agent-infra"
+version = "0.1.0"
+description = "Agent harness infra: CR Agent + A2A + worktree sandbox"
+requires-python = ">=3.12"
+dependencies = [
+    "google-adk[extensions]>=2.6",
+    "a2a-sdk[fastapi]>=1.0,<2",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]  # 让 tests/ 下任意子目录都能 import harness/agent_server/app
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# 编辑器插件与 CLI 共用此配置，规则集唯一事实源
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RET", "PL", "RUF"]
+ignore = [
+    "PLR0913",  # 函数参数多（ADK callback/构造器签名不由我们定）
+    "PLR2004",  # 测试里的魔法数（就是断言语义本身）
+    "SIM117",   # 嵌套 with/try 视可读性取舍
+    "PLC0415",  # 函数内 import 是刻意的（a2a/adk 惰性导入，降启动依赖）
+    "RUF001",   # 中文注释/文档的全角标点（本项目工作语言是中文）
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR1711", "RET505"]  # 测试里显式 return 分支更清晰
+"fixtures/build_demo_repo.py" = ["E501"]  # 内嵌生成文件的源码字符串，物理行长由内容定

@@ -1,0 +1,17 @@
+{
+  "name": "cr_agent",
+  "description": "代码质量管控：对指定 commit 做证据驱动的 CR",
+  "provider": { "organization": "agent_infra" },
+  "version": "0.1.0",
+  "capabilities": { "streaming": true },
+  "default_input_modes": ["text/plain"],
+  "default_output_modes": ["text/plain"],
+  "skills": [
+    {
+      "id": "code-review",
+      "name": "code-review",
+      "description": "CR 方法论：检查清单、severity 分级、验证流程",
+      "tags": ["cr", "code-review"]
+    }
+  ]
+}

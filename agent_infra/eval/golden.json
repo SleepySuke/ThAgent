@@ -1,0 +1,205 @@
+{
+  "defect-1": {
+    "issues": [
+      {
+        "file": "shop/stats.py",
+        "line": 8,
+        "severity": "high",
+        "type": "exception",
+        "desc": "bare except 吞掉所有异常，且函数内未 import order_total，NameError 被静默吞掉导致永远返回 0"
+      }
+    ],
+    "verdict": "request_changes",
+    "must_use": {
+      "cr_agent": [
+        "read_diff"
+      ],
+      "test_recall_agent": [
+        "search_knowledge"
+      ],
+      "case_agent": [
+        "read_artifact"
+      ],
+      "script_agent": [
+        "read_artifact",
+        "write_file"
+      ],
+      "report_agent": [
+        "read_artifact"
+      ]
+    },
+    "expect_nodes": [
+      "cr_agent",
+      "test_recall_agent",
+      "change_report_agent",
+      "case_agent",
+      "script_agent",
+      "case_executor",
+      "report_agent"
+    ],
+    "expect_test": true
+  },
+  "defect-2": {
+    "issues": [
+      {
+        "file": "shop/pricing.py",
+        "line": 3,
+        "severity": "mid",
+        "type": "consistency",
+        "alt_files": [
+          "tests/test_pricing.py"
+        ],
+        "desc": "新增 50 元档折扣改变了 tier_discount 行为，但 tests/test_pricing.py 的 test_tier_discount 未同步（pytest 失败）"
+      }
+    ],
+    "verdict": "request_changes",
+    "must_use": {
+      "cr_agent": [
+        "read_diff"
+      ],
+      "test_recall_agent": [
+        "search_knowledge"
+      ],
+      "case_agent": [
+        "read_artifact"
+      ],
+      "script_agent": [
+        "read_artifact",
+        "write_file"
+      ],
+      "report_agent": [
+        "read_artifact"
+      ]
+    },
+    "expect_nodes": [
+      "cr_agent",
+      "test_recall_agent",
+      "change_report_agent",
+      "case_agent",
+      "script_agent",
+      "case_executor",
+      "report_agent"
+    ],
+    "expect_test": true
+  },
+  "defect-3": {
+    "issues": [
+      {
+        "file": "shop/pricing.py",
+        "line": 30,
+        "severity": "high",
+        "type": "bug",
+        "desc": "负数数量（退货单）被 abs() 静默转正，退款单反而按正数量收费"
+      }
+    ],
+    "verdict": "request_changes",
+    "must_use": {
+      "cr_agent": [
+        "read_diff"
+      ],
+      "test_recall_agent": [
+        "search_knowledge"
+      ],
+      "case_agent": [
+        "read_artifact"
+      ],
+      "script_agent": [
+        "read_artifact",
+        "write_file"
+      ],
+      "report_agent": [
+        "read_artifact"
+      ]
+    },
+    "expect_nodes": [
+      "cr_agent",
+      "test_recall_agent",
+      "change_report_agent",
+      "case_agent",
+      "script_agent",
+      "case_executor",
+      "report_agent"
+    ],
+    "expect_test": true
+  },
+  "defect-4": {
+    "issues": [
+      {
+        "file": "shop/report.py",
+        "line": 14,
+        "severity": "low",
+        "type": "maintainability",
+        "desc": "render_order_report 重复实现了 tier_discount/total_price 的阶梯折扣逻辑，且函数过长；应复用 shop.pricing"
+      }
+    ],
+    "verdict": "approve",
+    "must_use": {
+      "cr_agent": [
+        "read_diff"
+      ],
+      "test_recall_agent": [
+        "search_knowledge"
+      ],
+      "case_agent": [
+        "read_artifact"
+      ],
+      "script_agent": [
+        "read_artifact",
+        "write_file"
+      ],
+      "report_agent": [
+        "read_artifact"
+      ]
+    },
+    "expect_nodes": [
+      "cr_agent",
+      "test_recall_agent",
+      "change_report_agent",
+      "case_agent",
+      "script_agent",
+      "case_executor",
+      "report_agent"
+    ],
+    "expect_test": true
+  },
+  "defect-5": {
+    "issues": [
+      {
+        "file": "shop/promo.py",
+        "line": 6,
+        "severity": "mid",
+        "type": "consistency",
+        "desc": "促销折扣 30% 超过本仓库约定折扣率上限 20%，需运营审批"
+      }
+    ],
+    "verdict": "request_changes",
+    "must_use": {
+      "cr_agent": [
+        "read_diff"
+      ],
+      "test_recall_agent": [
+        "search_knowledge"
+      ],
+      "case_agent": [
+        "read_artifact"
+      ],
+      "script_agent": [
+        "read_artifact",
+        "write_file"
+      ],
+      "report_agent": [
+        "read_artifact"
+      ]
+    },
+    "expect_nodes": [
+      "cr_agent",
+      "test_recall_agent",
+      "change_report_agent",
+      "case_agent",
+      "script_agent",
+      "case_executor",
+      "report_agent"
+    ],
+    "expect_test": true
+  }
+}
