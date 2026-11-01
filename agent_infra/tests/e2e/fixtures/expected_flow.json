@@ -1,0 +1,44 @@
+{
+  "node_order": ["cr", "test_recall", "case", "script", "execute", "report"],
+  "state_transition_triggers": [
+    "SUBMIT_TASK",
+    "PLAN_READY",
+    "EXECUTE_AGENT",
+    "EXECUTE_AGENT",
+    "EXECUTE_AGENT",
+    "EXECUTE_AGENT",
+    "EXECUTE_PROGRAM",
+    "EXECUTE_AGENT",
+    "ALL_STEPS_DONE"
+  ],
+  "final_status": "ok",
+  "plan": {
+    "plan_id": "P001",
+    "nodes": [
+      {"id": "cr", "agent": "cr_agent"},
+      {"id": "test_recall", "agent": "test_recall_agent"},
+      {"id": "case", "agent": "case_agent"},
+      {"id": "script", "agent": "script_agent"},
+      {"id": "execute", "program": "case_executor"},
+      {"id": "report", "agent": "report_agent"}
+    ],
+    "edges": [
+      ["cr", "test_recall"],
+      ["test_recall", "case"],
+      ["case", "script"],
+      ["script", "execute"],
+      ["execute", "report"]
+    ]
+  },
+  "cr_report": {
+    "issues": [
+      {"file": "shop/pricing.py", "line": 3, "severity": "mid",
+       "type": "bug", "desc": "x"}
+    ],
+    "verdict": "request_changes",
+    "summary": "s"
+  },
+  "test_cases": {
+    "script": "# TC-001 generate\ndef test_ok():\n    assert 1 == 1\n"
+  }
+}
