@@ -1,0 +1,18 @@
+{
+  "name": "strategy_agent",
+  "description": "根据上游任务说明与 diff 制定审查策略（重点面/审查顺序/严重度提示）",
+  "provider": {
+    "organization": "agent_infra"
+  },
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": true
+  },
+  "default_input_modes": [
+    "text/plain"
+  ],
+  "default_output_modes": [
+    "text/plain"
+  ],
+  "skills": []
+}
