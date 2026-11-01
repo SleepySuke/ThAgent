@@ -1,0 +1,18 @@
+{
+  "name": "case_agent",
+  "description": "消费召回结论与 CR 风险，产出用例清单（reuse/generate）",
+  "provider": {
+    "organization": "agent_infra"
+  },
+  "version": "0.1.0",
+  "capabilities": {
+    "streaming": true
+  },
+  "default_input_modes": [
+    "text/plain"
+  ],
+  "default_output_modes": [
+    "text/plain"
+  ],
+  "skills": []
+}
