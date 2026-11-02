@@ -9,7 +9,8 @@
     "EXECUTE_AGENT",
     "EXECUTE_PROGRAM",
     "EXECUTE_AGENT",
-    "ALL_STEPS_DONE"
+    "SUBMIT_REVIEW",
+    "REVIEW_ACCEPT"
   ],
   "final_status": "ok",
   "plan": {

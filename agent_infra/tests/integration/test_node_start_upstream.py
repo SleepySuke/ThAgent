@@ -38,10 +38,13 @@ async def test_node_start_persists_agent_and_upstream(tmp_path):
     eng = _CaptureEngine(runs, {"cr_agent": CR_OUT, "script_agent": TEST_OUT})
     await eng.execute_for("t-ns1", {"repo": "x", "commit": "d"}, CHAIN)
     starts = _starts(runs, "t-ns1")
-    assert starts[0]["payload"] == {"agent": "cr_agent", "upstream": {}}
-    assert starts[1]["payload"] == {
-        "agent": "script_agent",
-        "upstream": {"cr_agent": CR_OUT.output_data}}
+    assert starts[0]["payload"]["agent"] == "cr_agent"
+    assert starts[0]["payload"]["upstream"] == {}
+    # 九期裁定 5：node_start 钉桩 model/prompt_sha（细节归 test_engine_review）
+    assert starts[0]["payload"]["model"]
+    assert len(starts[0]["payload"]["prompt_sha"]) == 12
+    assert starts[1]["payload"]["agent"] == "script_agent"
+    assert starts[1]["payload"]["upstream"] == {"cr_agent": CR_OUT.output_data}
 
 
 async def test_program_node_start_has_empty_upstream(tmp_path, monkeypatch):

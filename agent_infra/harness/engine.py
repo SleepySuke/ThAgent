@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import functools
+import hashlib
 import json
+import os
 import time
 import uuid
 from pathlib import Path
@@ -22,6 +25,7 @@ from harness.checkpoint import (
     load_checkpoint,
     save_checkpoint,
 )
+from harness.config import resolve_model
 from harness.contract import (
     AgentInput,
     AgentOutput,
@@ -38,7 +42,33 @@ from harness.trace import Tracer
 
 DEFAULT_NODE_TIMEOUT_S = 600
 
+# 各 agent 代码里的默认模型统一是 zai/glm-4.6（agents/*/agent.py）；钉桩只做
+# 解析复现（env 覆盖 > 默认），不读 agent 源码
+_DEFAULT_MODEL = "zai/glm-4.6"
+
+_AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
+
 UPSTREAM_MAX_CHARS = 500   # 每节点语义结论预算（设计 §2：契约约束 + 超限截断）
+
+
+@functools.cache
+def _prompt_sha(ref: str) -> str:
+    """prompt.md sha256 前 12 位（钉桩：trace 可比对 prompt 版本漂移）。
+
+    按路径缓存：prompt 文件在进程内视为不变（改 prompt 需重启 server）。"""
+    p = _AGENTS_DIR / ref / "prompt.md"
+    if not p.exists():
+        return ""
+    return hashlib.sha256(p.read_bytes()).hexdigest()[:12]
+
+
+def _pinning(ref: str, spec_type: str) -> dict:
+    """node_start 钉桩 payload（裁定 5）：agent 节点记模型 + prompt 版本；
+    program 节点两者如实为空。"""
+    if spec_type == "program":
+        return {"model": "", "prompt_sha": ""}
+    return {"model": resolve_model(ref, _DEFAULT_MODEL),
+            "prompt_sha": _prompt_sha(ref)}
 
 
 def _clip_upstream(data: object) -> dict | None:
@@ -113,6 +143,11 @@ class _RunHandle:
     feedback: str = ""
     body_task: asyncio.Task | None = None
     current_node: str | None = None
+    round: int = 1  # replan 轮次（reject 后 +1，进 checkpoint 与 trace 事件）
+    fresh_pending: bool = False  # replan 新一轮待清盘（consume-once，t4-rev Important）
+    review_event: asyncio.Event | None = None
+    review_state: str | None = None   # None / "accepted" / "rejected"
+    review_feedback: str = ""
     node_urls: set[str] = dataclasses.field(default_factory=set)  # 参与节点 url（回收广播用）
 
 
@@ -215,25 +250,13 @@ class HarnessEngine:
             if not plan.nodes:
                 raise ValueError("empty plan")
             self._step(sm, "PLAN_READY", tracer)  # PLANNING → EXECUTING
-            # 打点①规划完成：沿用磁盘已有进度（execute_for 复用 checkpoint 的
-            # 接缝）；损坏 checkpoint 视为空，不挡新 run
-            try:
-                prev = load_checkpoint(self.runs_root, trace_id) or {}
-            except json.JSONDecodeError:
-                prev = {}
-            self._save_cp(tracer, trace_id, "executing",
-                          completed_nodes=prev.get("completed_nodes"),
-                          node_outputs=prev.get("node_outputs"),
-                          context_id=context_id)
-            while True:  # 暂停循环：body 被 pause 打断 → 落 checkpoint 挂起等 resume
-                body = asyncio.create_task(
-                    self._execute_plan(trace_id, payload, plan, sm,
-                                       tracer, context_id=context_id))
-                handle.body_task = body
+            self._inherit_progress(tracer, trace_id, handle.round, context_id)
+            while True:  # 暂停循环 + 审阅循环（裁定 2：两循环同构扩展）
+                body = self._start_body(handle, trace_id, payload, plan=plan,
+                                        sm=sm, tracer=tracer,
+                                        context_id=context_id)
                 try:
                     last_output = await body
-                    self._step(sm, "ALL_STEPS_DONE", tracer)  # → COMPLETED
-                    break
                 except asyncio.CancelledError:
                     if not handle.pause_requested:
                         raise    # 真取消（进程关闭等），不是用户打断
@@ -245,6 +268,17 @@ class HarnessEngine:
                         {"text": handle.feedback} if handle.feedback else None)}
                     self._step(sm, "RESUME", tracer)  # PAUSED → EXECUTING
                     tracer.emit("run_resumed", node_id=handle.current_node)
+                    continue
+                # 审阅门控（裁定 1/4）：返回 None → 终态收尾；返回新 plan →
+                # reject replan 继续循环
+                plan, payload = await self._review_gate(
+                    handle, sm, tracer, trace_id, payload=payload,
+                    plan=plan, context_id=context_id)
+                if plan is None:
+                    break
+                if not plan.nodes:
+                    raise ValueError("empty plan")
+                self._step(sm, "PLAN_READY", tracer)  # PLANNING → EXECUTING
         except Exception:
             self._step(sm, "ERROR", tracer)  # → FAILED
             self._save_cp(tracer, trace_id, "failed",
@@ -264,6 +298,95 @@ class HarnessEngine:
                 last_output.status if last_output and last_output.status == "ok"
                 else "failed"))
         return trace_id
+
+    def _inherit_progress(self, tracer: Tracer, trace_id: str, round_: int,
+                          context_id: str) -> None:
+        """打点①规划完成：沿用磁盘已有进度（execute_for 复用 checkpoint 的
+        接缝）；损坏 checkpoint 视为空，不挡新 run。"""
+        try:
+            prev = load_checkpoint(self.runs_root, trace_id) or {}
+        except json.JSONDecodeError:
+            prev = {}
+        self._save_cp(tracer, trace_id, "executing",
+                      completed_nodes=prev.get("completed_nodes"),
+                      node_outputs=prev.get("node_outputs"),
+                      round_=round_, context_id=context_id)
+
+    def _start_body(self, handle: _RunHandle, trace_id: str, payload: dict, *,
+                    plan: ExecutionPlan, sm: StateMachine, tracer: Tracer,
+                    context_id: str) -> asyncio.Task:
+        """起执行 body；replan 新一轮全新执行：先清空 checkpoint 进度。
+
+        只清 checkpoint 不够——_completed_from_disk 会从 trace.jsonl 推断上一
+        轮 node_end(ok) 复活已完成节点（裁定 3：新 plan 新进度），所以 body
+        同时带 fresh 跳过断点装载。**fresh 是 consume-once 标志**：不能用
+        round>1 重算——pause→resume 也会重入本方法，round≥2 时会把本轮
+        已完成节点清掉整轮重跑（t4-rev Important，repro 见回归测试）。"""
+        fresh = handle.fresh_pending
+        handle.fresh_pending = False
+        if fresh:
+            self._save_cp(tracer, trace_id, "executing", round_=handle.round,
+                          context_id=context_id)
+        body = asyncio.create_task(
+            self._execute_plan(trace_id, payload, plan, sm,
+                               tracer, context_id=context_id,
+                               fresh=fresh))
+        handle.body_task = body
+        return body
+
+    async def _review_gate(self, handle: _RunHandle, sm: StateMachine,
+                           tracer: Tracer, trace_id: str, *, payload: dict,
+                           plan: ExecutionPlan, context_id: str
+                           ) -> tuple[ExecutionPlan | None, dict]:
+        """body 正常完成后的审阅门控（裁定 1/2/4）。
+
+        返回 (None, payload) → 终态收尾（无 report 直落 / auto 直通 / accept）；
+        返回 (新 plan, 注入 feedback 的 payload) → reject replan 继续循环。
+        """
+        has_report = any(n.get("agent") == "report_agent" for n in plan.nodes)
+        if not has_report:  # 一期行为不变：无 report 不设门
+            self._step(sm, "ALL_STEPS_DONE", tracer)  # → COMPLETED
+            return None, payload
+        if os.environ.get("AGENT_INFRA_REVIEW_AUTO"):
+            # auto 也是 accept 语义（蒸馏照走，接线留 Task 6），但直接走
+            # ALL_STEPS_DONE——可用性分层，不是把门拆掉（坑 #22）
+            tracer.emit("review_auto_accepted", round=handle.round)
+            self._step(sm, "ALL_STEPS_DONE", tracer)
+            return None, payload
+        self._step(sm, "SUBMIT_REVIEW", tracer)  # → REVIEW_PENDING
+        try:
+            cp = load_checkpoint(self.runs_root, trace_id) or {}
+        except json.JSONDecodeError:  # 损坏视同空：不把执行成功的 run 打进 FAILED
+            cp = {}
+        self._save_cp(tracer, trace_id, "review_pending",
+                      completed_nodes=cp.get("completed_nodes", []),
+                      node_outputs=cp.get("node_outputs", {}),
+                      round_=handle.round, context_id=context_id)
+        tracer.emit("review_pending", round=handle.round)
+        if handle.review_event is None:
+            handle.review_event = asyncio.Event()
+        await handle.review_event.wait()   # 无超时：等裁决与等答案同语义
+        handle.review_event = None
+        accepted = handle.review_state == "accepted"
+        verdict_feedback = handle.review_feedback
+        handle.review_state = None         # 消费即清零（幂等窗关闭）
+        handle.review_feedback = ""
+        if accepted:
+            self._step(sm, "REVIEW_ACCEPT", tracer)  # → COMPLETED
+            tracer.emit("review_accepted", round=handle.round)
+            return None, payload
+        # reject → replan（裁定 2/3）：round+1，feedback 覆写注入（始终覆写
+        # dict-or-None——否则上一次意见残留泄漏给 planning），重新 planning
+        # （hitl_feedback 进 AgentInput 槽）后由调用方起新 body
+        handle.round += 1
+        handle.fresh_pending = True  # 下一 body 全新执行（consume-once）
+        self._step(sm, "REVIEW_REJECT", tracer)  # → PLANNING
+        tracer.emit("review_rejected", round=handle.round,
+                    feedback=verdict_feedback[:200])
+        payload = {**payload, "hitl_feedback": (
+            {"text": verdict_feedback} if verdict_feedback else None)}
+        plan = await self._plan(trace_id, payload, tracer, context_id)
+        return plan, payload
 
     async def _park_for_resume(self, handle: _RunHandle, sm: StateMachine,
                                tracer: Tracer, trace_id: str,
@@ -305,10 +428,11 @@ class HarnessEngine:
 
     async def _execute_plan(self, trace_id: str, payload: dict,
                             plan: ExecutionPlan, sm: StateMachine,
-                            tracer: Tracer, *, context_id: str) -> AgentOutput:
-        # 断点续跑：从 checkpoint 载入进度，已完成节点跳过（idempotency 语义）
-        completed, node_outputs = self._completed_from_disk(
-            self.runs_root, trace_id, plan)
+                            tracer: Tracer, *, context_id: str,
+                            fresh: bool = False) -> AgentOutput:
+        # 断点续跑：从 checkpoint 载入进度，已完成节点跳过（idempotency 语义）；
+        # fresh=True（replan 轮）全新执行（裁定 3：新 plan 新进度）
+        completed, node_outputs = self._load_progress(trace_id, plan, fresh)
         by_id = {n["id"]: n for n in plan.nodes}
         order = _topo_order(plan.nodes, plan.edges)
         artifact_refs: list = []
@@ -335,7 +459,10 @@ class HarnessEngine:
             if spec.type != "program":
                 upstream, upstream_nodes, corrupt = _build_upstream(
                     node_outputs, completed, by_id)
-            tracer.emit("node_start", node_id=nid, agent=ref, upstream=upstream)
+            # 钉桩（裁定 5）：trace 记录节点用的模型与 prompt 版本（sha 前 12
+            # 位），比对 prompt/模型漂移
+            tracer.emit("node_start", node_id=nid, agent=ref, upstream=upstream,
+                        **_pinning(ref, spec.type))
             self._save_cp(tracer, trace_id, "executing", current_node=nid,
                           completed_nodes=completed, node_outputs=node_outputs,
                           context_id=context_id)  # 打点②执行前
@@ -392,13 +519,22 @@ class HarnessEngine:
                  current_node: str | None = None,
                  completed_nodes: list[str] | None = None,
                  node_outputs: dict | None = None,
+                 round_: int = 1,
                  context_id: str | None = None) -> None:
         cp = Checkpoint(run_id=run_id, context_id=context_id or run_id,
                         current_node=current_node, harness_state=harness_state,
                         completed_nodes=completed_nodes or [],
-                        node_outputs=node_outputs or {})
+                        node_outputs=node_outputs or {}, round=round_)
         save_checkpoint(self.runs_root, run_id, dataclasses.asdict(cp))
         tracer.emit("checkpoint", state=harness_state, current_node=current_node)
+
+    def _load_progress(self, trace_id: str, plan: ExecutionPlan,
+                       fresh: bool) -> tuple[list[str], dict]:
+        """断点进度装载：fresh（replan 轮）全新执行——旧 checkpoint 与 trace
+        推断的进度都不得复活上一轮节点（裁定 3：新 plan 新进度）。"""
+        if fresh:
+            return [], {}
+        return self._completed_from_disk(self.runs_root, trace_id, plan)
 
     @staticmethod
     def _completed_from_disk(run_root: Path, trace_id: str,
@@ -439,7 +575,7 @@ class HarnessEngine:
                 "run_id": trace_id, "context_id": trace_id,
                 "current_node": None, "harness_state": "executing",
                 "completed_nodes": completed, "node_outputs": outputs,
-                "version": 1, "created_at": time.time()})
+                "version": 2, "created_at": time.time()})
         return completed, outputs
 
     async def pause_run(self, trace_id: str) -> bool:
@@ -474,6 +610,22 @@ class HarnessEngine:
             return False
         handle.feedback = text
         handle.resume_event.set()
+        return True
+
+    def review_run(self, trace_id: str, action: str, feedback: str = "") -> bool:
+        """提交审阅裁决（app 层 /review 路由入口）：首个生效，后续幂等拒绝。
+
+        action: "accept" | "reject"。矩阵 #2/#3：非审阅态 / handle 已退出 /
+        已有未消费裁决 → False。"""
+        handle = self._runs.get(trace_id)
+        if handle is None or handle.review_event is None \
+                or handle.review_state is not None:
+            return False
+        if action not in ("accept", "reject"):
+            return False
+        handle.review_state = "accepted" if action == "accept" else "rejected"
+        handle.review_feedback = feedback
+        handle.review_event.set()
         return True
 
     def paused_runs(self, context_id: str) -> list[dict]:

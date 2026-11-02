@@ -8,6 +8,7 @@ cr_report.json / test_cases.json 的实际内容）与 fixture
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import socket
 import threading
@@ -104,7 +105,16 @@ async def test_e2e_multi_agent_flow(tmp_path):
 
     try:
         engine = HarnessEngine(None, runs, agent_urls=ports)
-        await engine.execute_for(trace_id, {"repo": "x", "commit": "defect-1"})
+        # 九期审阅门控：plan 含 report → park 在 REVIEW_PENDING，后台 accept
+        task = asyncio.create_task(engine.execute_for(
+            trace_id, {"repo": "x", "commit": "defect-1"}))
+        while True:
+            h = engine._runs.get(trace_id)
+            if h is not None and h.review_event is not None:
+                break
+            await asyncio.sleep(0.05)
+        assert engine.review_run(trace_id, "accept") is True
+        await task
     finally:
         for s in servers:
             s.stop()

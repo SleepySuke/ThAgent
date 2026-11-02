@@ -119,7 +119,9 @@ def _input_json(prompt: str) -> dict:
     return json.loads(prompt[prompt.index("{"):])
 
 
-async def test_full_chain_dual_reports(tmp_path):  # 矩阵 #12
+async def test_full_chain_dual_reports(tmp_path, monkeypatch):  # 矩阵 #12
+    # 九期审阅门控：plan 含 report → 测试用 REVIEW_AUTO 直通（accept 语义照走）
+    monkeypatch.setenv("AGENT_INFRA_REVIEW_AUTO", "1")
     runs = tmp_path / "runs"
     seen: dict = {}
 
@@ -191,7 +193,9 @@ async def test_full_chain_dual_reports(tmp_path):  # 矩阵 #12
     assert rep_up["case_executor"]["exit_code"] == 0        # 真实执行
 
 
-async def test_diagnose_selected_on_failure(tmp_path):  # 矩阵 #13
+async def test_diagnose_selected_on_failure(tmp_path, monkeypatch):  # 矩阵 #13
+    # 九期审阅门控：同上，REVIEW_AUTO 直通
+    monkeypatch.setenv("AGENT_INFRA_REVIEW_AUTO", "1")
     runs = tmp_path / "runs"
     seen: dict = {}
 

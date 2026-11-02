@@ -21,7 +21,8 @@ class Checkpoint:
     harness_state: str
     completed_nodes: list[str] = field(default_factory=list)
     node_outputs: dict = field(default_factory=dict)
-    version: int = 1
+    round: int = 1  # 九期：审阅 replan 轮次（round>1 = reject 后的新一轮）
+    version: int = 2
     created_at: float = field(default_factory=time.time)
 
 
@@ -43,7 +44,10 @@ def load_checkpoint(runs_root: Path, run_id: str) -> dict | None:
     p = checkpoint_path(runs_root, run_id)
     if not p.exists():
         return None
-    return json.loads(p.read_text(encoding="utf-8"))
+    cp = json.loads(p.read_text(encoding="utf-8"))
+    # 兼容读取（裁定 6）：version 1 旧 checkpoint 无 round 键 → 默认 1
+    cp.setdefault("round", 1)
+    return cp
 
 
 def recover_interrupted(runs_root: Path) -> list[dict]:

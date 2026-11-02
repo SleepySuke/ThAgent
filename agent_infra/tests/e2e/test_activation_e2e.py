@@ -145,7 +145,10 @@ async def test_upstream_chain_injection(tmp_path):  # 矩阵 #8
     assert json.loads((arts / "review_strategy.json").read_text()) == STR_OUT
 
 
-async def test_planning_picks_full_chain_to_report(tmp_path):  # 矩阵 #9
+async def test_planning_picks_full_chain_to_report(
+        tmp_path, monkeypatch):  # 矩阵 #9
+    # 九期审阅门控：plan 含 report → 测试用 REVIEW_AUTO 直通（accept 语义照走）
+    monkeypatch.setenv("AGENT_INFRA_REVIEW_AUTO", "1")
     runs = tmp_path / "runs"
     seen: dict = {}
 
