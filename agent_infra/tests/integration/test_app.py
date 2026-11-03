@@ -331,3 +331,53 @@ def test_session_message_default_llm_path_runs(tmp_path, monkeypatch):
         r = c.post("/session/repo:demo_repo/message", json={"query": "继续"})
     assert r.status_code == 200
     assert r.json() == {"intent": "resume", "trace_id": "aaa"}
+
+
+def test_run_status_review_pending_face(tmp_path):
+    """V2c-2：checkpoint 审阅态优先于 cr_report 判定（否则报告已出即误判 ok）。"""
+    import time as _t
+
+    from harness.checkpoint import save_checkpoint
+    app = create_app(engine=None, fixture_repo=tmp_path, runs_root=tmp_path)
+    d = tmp_path / "t-rev"
+    (d / "artifacts").mkdir(parents=True)
+    (d / "artifacts" / "cr_report.json").write_text('{"verdict": "approve"}')
+    (d / "artifacts" / "execution_report.md").write_text("# 报告", encoding="utf-8")
+    save_checkpoint(tmp_path, "t-rev", {
+        "run_id": "t-rev", "context_id": "repo:demo_repo",
+        "current_node": "report", "harness_state": "review_pending",
+        "completed_nodes": [], "node_outputs": {}, "round": 2,
+        "version": 2, "created_at": _t.time()})
+    with TestClient(app) as c:
+        st = c.get("/runs/t-rev").json()
+        assert st["status"] == "review_pending"
+        assert st["round"] == 2
+        assert st["report"] == "# 报告"
+
+
+async def test_session_message_serialized_per_context(tmp_path, monkeypatch):
+    """裁定 11：同 context 并发 message 一次只处理一条（无交错）。"""
+    import asyncio
+
+    import httpx
+
+    order: list[str] = []
+
+    def fake_classify(query, paused):
+        # sync fake（handler 经 to_thread 调用）：线程池里可交错，锁不住则乱序
+        import time
+        order.append("in")
+        time.sleep(0.05)
+        order.append("out")
+        return {"intent": "new"}
+
+    monkeypatch.setattr("harness.intake.classify_intent", fake_classify)
+    app = create_app(engine=IntakeEngine(tmp_path / "runs", PAUSED),
+                     fixture_repo=tmp_path, runs_root=tmp_path / "runs")
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport,
+                                 base_url="http://t") as cli:
+        await asyncio.gather(*[
+            cli.post("/session/repo:demo_repo/message", json={"query": "x"})
+            for _ in range(2)])
+    assert order == ["in", "out", "in", "out"]   # 无交错 = 锁生效

@@ -266,3 +266,31 @@ async def test_replan_round_pause_resume_keeps_progress(tmp_path):
     cr_n = len([s for s in engine.sent if s.node_id == "cr_agent"])
     assert cr_n == 2, f"cr 重跑={cr_n}（pause→resume 清掉了 round2 进度）"
     assert len(engine.plan_payloads) == 2          # reject 只重规划一次
+
+
+async def test_accept_persists_completed_checkpoint(tmp_path):
+    """t5-rev Critical 回归：accept 后 checkpoint 必须落 completed。
+
+    修复前 accept 路径无终态落盘（伪码即漏，被 app 测试 fake 代写掩盖）——
+    run_status 审阅面永久误报待裁决、boot_sweep 终态回收永不生效。"""
+    runs = tmp_path / "runs"
+    engine = _FakeEngine(runs, {"cr_agent": CR_OUT, "report_agent": REPORT_OUT})
+    task = asyncio.create_task(
+        engine.execute_for("t10", {"repo": "x"}, REPORT_PLAN))
+    await _wait_review(engine, "t10")
+    engine.review_run("t10", "accept")
+    await task
+    assert load_checkpoint(runs, "t10")["harness_state"] == "completed"
+    assert load_checkpoint(runs, "t10")["round"] == 1
+
+
+async def test_no_report_chain_persists_completed(tmp_path):
+    """同根第二面：无 report 直落路径也落 completed（boot_sweep 依赖终态）。"""
+    runs = tmp_path / "runs"
+    engine = _FakeEngine(runs, {"cr_agent": CR_OUT})
+    await engine.execute_for("t11", {"repo": "x"},
+                             ExecutionPlan(plan_id="s",
+                                           nodes=[{"id": "cr",
+                                                   "agent": "cr_agent"}],
+                                           edges=[]))
+    assert load_checkpoint(runs, "t11")["harness_state"] == "completed"

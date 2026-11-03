@@ -597,4 +597,5 @@ async def test_paused_runs_merges_disk_checkpoints(tmp_path):
     (runs / "t-bad" / "checkpoint.json").write_text("{oops", encoding="utf-8")
     eng = _SlowEngine(runs, {"cr_agent": CR_OUT})
     assert eng.paused_runs("repo:x") == [
-        {"trace_id": "t-disk", "current_node": "cr", "context_id": "repo:x"}]
+        {"trace_id": "t-disk", "current_node": "cr", "context_id": "repo:x",
+         "state": "paused"}]

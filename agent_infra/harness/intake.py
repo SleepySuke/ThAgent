@@ -14,6 +14,10 @@ _SYSTEM = (
     '继续/补充之前任务 → {"intent":"resume","trace_id":"<挂起任务的trace_id>"}\n'
     '全新任务 → {"intent":"new"}\n'
     '模糊指代（如"继续之前那个"）→ {"intent":"refer"}\n'
+    "挂起任务列表条目含 state 字段：paused=执行中等人补充（继续/补充即 resume）；"
+    "review_pending=报告已出等人裁决——用户明确表示接受/通过/认可某 review_pending "
+    "任务时路由到它（如「接受那份报告」）；带修改意见的重做不是路由意图"
+    "（用户应走页面审阅卡，模糊即 fallback）。\n"
     "挂起任务列表：%s")
 
 

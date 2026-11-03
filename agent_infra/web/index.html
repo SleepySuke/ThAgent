@@ -117,6 +117,7 @@ function startWatch(tid, label) {
     const p = (JSON.parse(e.data).payload) || {};
     es.close(); es = null;
     dismissHitlCard();  // run 已结束：遗留的 HITL 卡作废，别让用户对着 404 干等
+    dismissReviewCard();
     setPill(p.status === 'ok' ? 'OK' : 'FAILED', p.status === 'ok' ? 'ok' : 'failed');
     ['btn-pause','btn-resume'].forEach(id =>
       document.getElementById(id).style.display = 'none');  // run 已结束：都收起
@@ -290,6 +291,9 @@ function onTrace(e) {
       break;
     case 'run_paused': setPill('PAUSED', ''); showResume(true); break;
     case 'run_resumed': setPill('RUNNING', ''); showResume(false); break;
+    case 'review_pending': setPill('REVIEW', ''); showReviewCard(p.round || 1); break;
+    case 'review_accepted':
+    case 'review_rejected': dismissReviewCard(); break;
     case 'run_end':
       setPill(p.status === 'ok' ? 'OK' : 'FAILED',
               p.status === 'ok' ? 'ok' : 'failed'); break;
@@ -374,6 +378,50 @@ function updateHitlWait() {
     `等待人工输入（已等 ${mins} 分钟，无超时）`;
 }
 
+/* ---------- 审阅卡（review_pending 事件驱动；replan 后新一轮可重复弹出） ---------- */
+async function showReviewCard(round) {
+  dismissReviewCard();
+  let report = null, st = {};
+  try {   // 报告全文从 run_status 审阅面取（GET /runs/{id}）
+    st = await (await fetch(`/runs/${traceId}`)).json();
+    if (st.status !== 'review_pending') return;   // 竞态：已被裁决/已结束
+    report = st.report;
+  } catch (_) { return; }
+  const div = document.createElement('div');
+  div.id = 'review-card'; div.className = 'card';
+  div.style.borderColor = '#6366f1';
+  div.innerHTML = `
+    <b>🔍 审阅裁决 <span style="background:#eef;font-size:11px;
+      padding:1px 6px;border-radius:8px">第 ${st.round || round} 轮</span></b>
+    <pre style="max-height:260px">${esc(report || '（报告产物缺失）')}</pre>
+    <textarea id="review-feedback" rows="2"
+      placeholder="重做意见（replan 必填）"
+      oninput="document.getElementById('btn-replan').disabled = !this.value.trim()"></textarea><br>
+    <button class="primary" onclick="submitReview('accept')">接受报告</button>
+    <button id="btn-replan" disabled onclick="submitReview('replan')">重做</button>
+    <div id="review-msg" style="color:#999;font-size:12px"></div>`;
+  document.getElementById('chat').appendChild(div);
+}
+function dismissReviewCard() {
+  const old = document.getElementById('review-card');
+  if (old) old.remove();
+}
+async function submitReview(action) {
+  const feedback = action === 'replan'
+    ? document.getElementById('review-feedback').value.trim() : '';
+  const r = await fetch(`/runs/${traceId}/review`, {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action, feedback})});
+  const box = document.getElementById('review-msg');
+  if (!box) return;                // SSE 已先到收卡（review_accepted 竞态）
+  if (r.status === 409) {          // 幂等：已被别处裁决
+    box.textContent = '该 run 已被裁决';
+    return;
+  }
+  if (!r.ok) { box.textContent = `提交失败（${r.status}）`; return; }
+  dismissReviewCard();             // replan 后新一轮 review_pending 再弹
+}
+
 /* ---------- 暂停 / 继续 ---------- */
 async function doPause() {
   const r = await fetch(`/runs/${traceId}/pause`, {method:'POST'});
@@ -400,14 +448,23 @@ async function loadPaused() {
     const card = document.getElementById('paused-card');
     card.style.display = list.length ? '' : 'none';
     document.getElementById('paused-list').innerHTML = list.map(p =>
-      `<div class="paused-item card" onclick="resumeOne('${p.trace_id}')">
-         ${p.trace_id.slice(0,8)} · 卡在 ${esc(p.current_node || '?')}</div>`).join('');
+      `<div class="paused-item card" onclick="openPaused('${p.trace_id}', '${p.state || 'paused'}')">
+         ${p.trace_id.slice(0,8)} · 卡在 ${esc(p.current_node || '?')}
+         <span style="background:${p.state === 'review_pending' ? '#eef' : '#fee'};
+           font-size:11px;padding:1px 6px;border-radius:8px">
+           ${p.state === 'review_pending' ? '待裁决' : '待补充'}</span></div>`).join('');
   } catch (e) { console.warn('loadPaused failed', e); }  // server 重启期：静默，下个周期重试
 }
 async function resumeOne(tid) {
   await fetch(`/runs/${tid}/resume`, {method:'POST',
     headers:{'Content-Type':'application/json'}, body: JSON.stringify({text:''})});
   loadPaused();  // 恢复成功与否以列表刷新为准；切回该 run 视图由用户点选
+}
+async function openPaused(tid, state) {
+  // 待裁决：切到该 run 的流并弹审阅卡；待补充：走既有 resume
+  if (state !== 'review_pending') { await resumeOne(tid); return; }
+  startWatch(tid, tid.slice(0,8));
+  await showReviewCard();
 }
 async function sendChat() {
   const q = document.getElementById('chat-input').value;

@@ -279,6 +279,8 @@ class HarnessEngine:
                 if not plan.nodes:
                     raise ValueError("empty plan")
                 self._step(sm, "PLAN_READY", tracer)  # PLANNING → EXECUTING
+            # 终态落盘（t5-rev Critical 的根修）：正常完成三路径统一 completed
+            self._persist_completed(tracer, trace_id, handle.round, context_id)
         except Exception:
             self._step(sm, "ERROR", tracer)  # → FAILED
             self._save_cp(tracer, trace_id, "failed",
@@ -310,6 +312,21 @@ class HarnessEngine:
         self._save_cp(tracer, trace_id, "executing",
                       completed_nodes=prev.get("completed_nodes"),
                       node_outputs=prev.get("node_outputs"),
+                      round_=round_, context_id=context_id)
+
+    def _persist_completed(self, tracer: Tracer, trace_id: str, round_: int,
+                           context_id: str) -> None:
+        """终态落盘（t5-rev Critical 根修）：正常完成（直落/auto/审阅 accept
+        三路径）统一落 completed——不落盘则 run_status 审阅面永久误报、
+        paused_runs 永列待裁决、boot_sweep 的终态回收对完成 run 永不生效。
+        保留进度字段供离线评分/审计。"""
+        try:
+            prev = load_checkpoint(self.runs_root, trace_id) or {}
+        except json.JSONDecodeError:
+            prev = {}
+        self._save_cp(tracer, trace_id, "completed",
+                      completed_nodes=prev.get("completed_nodes", []),
+                      node_outputs=prev.get("node_outputs", {}),
                       round_=round_, context_id=context_id)
 
     def _start_body(self, handle: _RunHandle, trace_id: str, payload: dict, *,
@@ -637,8 +654,14 @@ class HarnessEngine:
         out = []
         seen: set[str] = set()
         for tid, h in self._runs.items():
+            # state 字段区分两种挂起：等人补充（resume）vs 等人裁决（审阅）
             if h.resume_event is not None:
-                out.append({"trace_id": tid, "current_node": h.current_node})
+                out.append({"trace_id": tid, "current_node": h.current_node,
+                            "state": "paused"})
+                seen.add(tid)
+            elif h.review_event is not None:
+                out.append({"trace_id": tid, "current_node": h.current_node,
+                            "state": "review_pending"})
                 seen.add(tid)
         root = self.runs_root
         if not root.exists():
@@ -650,10 +673,11 @@ class HarnessEngine:
                 cp = load_checkpoint(root, run_dir.name)
             except json.JSONDecodeError:  # 损坏 checkpoint 不挡扫描
                 continue
-            if cp and cp.get("harness_state") == "paused":
+            if cp and cp.get("harness_state") in ("paused", "review_pending"):
                 out.append({"trace_id": run_dir.name,
                             "current_node": cp.get("current_node"),
-                            "context_id": cp.get("context_id")})
+                            "context_id": cp.get("context_id"),
+                            "state": cp.get("harness_state")})
         return out
 
     async def _run_program(self, spec: NodeSpec, trace_id: str,

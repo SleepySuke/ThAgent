@@ -6,6 +6,7 @@ import json
 import subprocess
 import uuid
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from fastapi import FastAPI, Request
@@ -40,6 +41,12 @@ class SessionMessage(BaseModel):
     query: str
 
 
+class ReviewRequest(BaseModel):
+    # 坑 #20：模型必须模块级——闭包内定义 FastAPI 解析不出
+    action: Literal["accept", "replan"]
+    feedback: str = ""
+
+
 def create_app(engine: HarnessEngine | None = None,  # noqa: PLR0915 —— 路由闭包集中定义
                fixture_repo: Path | None = None,
                runs_root: Path | None = None) -> FastAPI:
@@ -47,6 +54,10 @@ def create_app(engine: HarnessEngine | None = None,  # noqa: PLR0915 —— 路�
     repo_path = Path(fixture_repo) if fixture_repo else DEFAULT_REPO
     runs = Path(runs_root) if runs_root else DEFAULT_RUNS
     _background_tasks: set[asyncio.Task] = set()
+    # 裁定 11：per-context 串行化 v1 用 Lock（锁内 classify+路由，一次一条，
+    # 语义等价 inbox）。升级路径：消息量大时换真队列 + 优先级。锁条目不
+    # 回收：context 数与仓库同量级、单条 Lock 开销可忽略（t5-rev Minor）
+    _ctx_locks: dict[str, asyncio.Lock] = {}
 
     def _spawn(coro) -> None:
         t = asyncio.create_task(coro)
@@ -122,6 +133,20 @@ def create_app(engine: HarnessEngine | None = None,  # noqa: PLR0915 —— 路�
         if err.exists():
             return {"status": "failed", "report": None,
                     "error": err.read_text()}
+        # 审阅面（V2c-2）：report 已出但等人裁决——必须先于 cr_report 判定，
+        # 否则报告落盘即误判 "ok"。无 execution_report.md 的旧链 report=None。
+        cp = runs / trace_id / "checkpoint.json"
+        if cp.exists():
+            try:
+                data = json.loads(cp.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                data = {}
+            if data.get("harness_state") == "review_pending":
+                md = runs / trace_id / "artifacts" / "execution_report.md"
+                return {"status": "review_pending",
+                        "round": data.get("round", 1),
+                        "report": md.read_text(encoding="utf-8")
+                        if md.exists() else None}
         report = runs / trace_id / "artifacts" / "cr_report.json"
         done = report.exists()
         if done:
@@ -200,23 +225,55 @@ def create_app(engine: HarnessEngine | None = None,  # noqa: PLR0915 —— 路�
         async handler：resume_run 里 resume_event.set() 必须发生在事件循环
         线程（threadpool 线程改 asyncio 状态属越界）；阻塞的 LLM 分类经
         asyncio.to_thread 移出事件循环。
+
+        全程持 per-context 锁：同会话并发消息一次只处理一条（裁定 11）。
         """
-        from harness.intake import classify_intent
-        # engine 不按 context_id 过滤（内存条目无此字段），调用方自行筛（缺省=本会话）
-        paused = [p for p in engine.paused_runs(context_id)
-                  if p.get("context_id", context_id) == context_id]
-        out = await asyncio.to_thread(classify_intent, req.query, paused)
-        if out["intent"] == "fallback":
-            return JSONResponse(
-                {"fallback": True, "candidates": out["candidates"]},
-                status_code=409)
-        if out["intent"] == "resume":
-            ok = engine.resume_run(out["trace_id"], req.query)
-            if not ok:
-                return JSONResponse({"error": "run not paused"},
-                                    status_code=409)
-            return {"intent": "resume", **out}
-        return {"intent": "new"}
+        async with _ctx_locks.setdefault(context_id, asyncio.Lock()):
+            from harness.intake import classify_intent
+            # engine 不按 context_id 过滤（内存条目无此字段），调用方自行筛（缺省=本会话）
+            paused = [p for p in engine.paused_runs(context_id)
+                      if p.get("context_id", context_id) == context_id]
+            out = await asyncio.to_thread(classify_intent, req.query, paused)
+            if out["intent"] == "fallback":
+                return JSONResponse(
+                    {"fallback": True, "candidates": out["candidates"]},
+                    status_code=409)
+            if out["intent"] == "resume":
+                # review_pending 的「接受」经聊天直达审阅 accept（t5-rev
+                # Important：否则 resume_run 对审阅态恒 False → 409，教学
+                # 承诺脱节）；带修改意见的重做走页面审阅卡（需 feedback 输入）
+                entry = next((p for p in paused
+                              if p["trace_id"] == out["trace_id"]), {})
+                if entry.get("state") == "review_pending":
+                    ok = engine.review_run(out["trace_id"], "accept")
+                    if not ok:
+                        return JSONResponse(
+                            {"error": "run not awaiting review"},
+                            status_code=409)
+                    return {**out, "intent": "review_accepted"}
+                ok = engine.resume_run(out["trace_id"], req.query)
+                if not ok:
+                    return JSONResponse({"error": "run not paused"},
+                                        status_code=409)
+                return {"intent": "resume", **out}
+            return {"intent": "new"}
+
+    @app.post("/runs/{trace_id}/review")
+    async def review(trace_id: str, req: ReviewRequest):
+        """审阅裁决入口（engine.review_run 幂等：首个生效，后续 409）。
+
+        action 词汇表对前端用 replan（重做语义），engine 侧事件名是
+        reject（REVIEW_REJECT→PLANNING）——此处翻译，Task 4 语义不动。
+        """
+        if not (runs / trace_id).exists():
+            return JSONResponse({"error": "no such run"}, status_code=404)
+        ok = engine.review_run(
+            trace_id, "accept" if req.action == "accept" else "reject",
+            req.feedback)
+        if not ok:
+            return JSONResponse({"error": "run not awaiting review"},
+                                status_code=409)
+        return {"reviewed": True, "action": req.action}
 
     @app.get("/runs/{trace_id}/stream")
     async def run_stream(trace_id: str, request: Request):
