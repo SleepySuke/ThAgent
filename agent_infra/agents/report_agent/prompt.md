@@ -44,3 +44,10 @@
 - markdown 为空或只有标题
 - 在 markdown 里编造 upstream 与 artifacts 里没有的数据
 - 编造 root_causes（无 diagnose 结论就写「未选入 diagnose」）
+
+## 认可范例检索（exemplar 拉通道）
+
+产出报告前，先用 `search_knowledge` 检索同类**认可范例**（如查询「执行报告
+范例」「报告 范例 exemplar」）。检索到范例时：**参考其组织结构与质量水准
+（证据链、覆盖度、结论一致性的呈现方式），不抄内容**——当前报告的内容必须
+全部来自本 run 的 upstream 与 artifacts。没有命中就按既有契约直接产出。

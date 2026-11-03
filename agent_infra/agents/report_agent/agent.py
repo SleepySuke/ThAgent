@@ -27,6 +27,7 @@ def build_agent(run: RunContext, manager: SandboxManager,
         model=LiteLlm(model=model, **llm_kwargs),
         instruction=(_AGENT_DIR / "prompt.md").read_text(encoding="utf-8"),
         description="汇总全链执行结论产出人读的执行报告（execution_report.md）",
-        tools=build_tools(run, manager, ["read_artifact"]),
+        tools=build_tools(run, manager,
+                          ["read_artifact", "search_knowledge"]),
         **build_callbacks(run, policy),
     )

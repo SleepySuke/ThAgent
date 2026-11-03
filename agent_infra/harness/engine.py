@@ -35,7 +35,7 @@ from harness.contract import (
 )
 from harness.memory import MemoryStore, NoopMemory, RecallSpec
 from harness.policy import DEFAULT_NODE_POLICY, NODE_POLICIES, NodePolicy
-from harness.programs import PROGRAM_HANDLERS
+from harness.programs import PROGRAM_HANDLERS, distill_executor
 from harness.registry import AGENT_REGISTRY, NodeSpec, resolve_node
 from harness.state import HarnessState, StateMachine
 from harness.trace import Tracer
@@ -314,6 +314,18 @@ class HarnessEngine:
                       node_outputs=prev.get("node_outputs"),
                       round_=round_, context_id=context_id)
 
+    def _distill(self, tracer: Tracer, trace_id: str, round_: int) -> None:
+        """accept 后机械蒸馏（Task 6 接线）：同步函数文件 IO 快直接调；
+        失败吞掉 emit distill_failed 不阻断 COMPLETED（矩阵 #8，memory 守卫
+        同款）。语料目录可注入（测试隔离），默认仓库 knowledge/distilled/。"""
+        try:
+            result = distill_executor.distill(
+                self.runs_root, trace_id, round_,
+                corpus_dir=getattr(self, "distill_corpus_dir", None))
+            tracer.emit("distill_end", **result)
+        except Exception as exc:
+            tracer.emit("distill_failed", error=str(exc)[:200])
+
     def _persist_completed(self, tracer: Tracer, trace_id: str, round_: int,
                            context_id: str) -> None:
         """终态落盘（t5-rev Critical 根修）：正常完成（直落/auto/审阅 accept
@@ -368,6 +380,7 @@ class HarnessEngine:
             # auto 也是 accept 语义（蒸馏照走，接线留 Task 6），但直接走
             # ALL_STEPS_DONE——可用性分层，不是把门拆掉（坑 #22）
             tracer.emit("review_auto_accepted", round=handle.round)
+            self._distill(tracer, trace_id, handle.round)   # auto 也是 accept
             self._step(sm, "ALL_STEPS_DONE", tracer)
             return None, payload
         self._step(sm, "SUBMIT_REVIEW", tracer)  # → REVIEW_PENDING
@@ -391,6 +404,7 @@ class HarnessEngine:
         if accepted:
             self._step(sm, "REVIEW_ACCEPT", tracer)  # → COMPLETED
             tracer.emit("review_accepted", round=handle.round)
+            self._distill(tracer, trace_id, handle.round)   # Task 6 接线
             return None, payload
         # reject → replan（裁定 2/3）：round+1，feedback 覆写注入（始终覆写
         # dict-or-None——否则上一次意见残留泄漏给 planning），重新 planning

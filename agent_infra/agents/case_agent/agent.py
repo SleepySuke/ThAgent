@@ -28,6 +28,7 @@ def build_agent(run: RunContext, manager: SandboxManager,
         instruction=(_AGENT_DIR / "prompt.md").read_text(encoding="utf-8"),
         description="消费召回结论与 CR 风险，产出用例清单（reuse/generate）",
         tools=build_tools(run, manager,
-                          ["read_artifact", "read_file", "list_files"]),
+                          ["read_artifact", "read_file", "list_files",
+                           "search_knowledge"]),
         **build_callbacks(run, policy),
     )

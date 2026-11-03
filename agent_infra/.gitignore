@@ -9,3 +9,6 @@ eval/_cmp_summary.py
 scripts/model_compare.sh
 eval/report.py
 scripts/model_rerun_deepseek.sh
+
+# 九期蒸馏语料（运行产物，不入库——回滚靠 frontmatter active 标志）
+knowledge/distilled/

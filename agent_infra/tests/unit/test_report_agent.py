@@ -25,7 +25,7 @@ def _agent():
 def test_build_report_agent_reads_artifacts_only():
     agent = _agent()
     assert agent.name == "report_agent"
-    assert {t.__name__ for t in agent.tools} == {"read_artifact"}
+    assert {t.__name__ for t in agent.tools} == {"read_artifact", "search_knowledge"}
     for cb in ("before_agent_callback", "after_agent_callback",
                "before_model_callback", "after_model_callback",
                "before_tool_callback", "after_tool_callback"):
@@ -34,7 +34,7 @@ def test_build_report_agent_reads_artifacts_only():
 
 def test_report_policy_readonly_and_memory_off():
     p = NODE_POLICIES["report_agent"]
-    assert p.allowed_tools == frozenset({"read_artifact"})
+    assert p.allowed_tools == frozenset({"read_artifact", "search_knowledge"})
     assert p.allowed_cmds == frozenset()
     assert p.memory_enabled is False
 
@@ -67,7 +67,7 @@ def test_report_finalize_registered():
 def test_report_still_readonly_wired():
     agent = _agent()
     assert agent.name == "report_agent"
-    assert {t.__name__ for t in agent.tools} == {"read_artifact"}   # 工具面不变
+    assert {t.__name__ for t in agent.tools} == {"read_artifact", "search_knowledge"}   # 工具面不变
 
 
 def test_prompt_teaches_execution_report():     # 矩阵 #8 教学钉桩
@@ -76,3 +76,9 @@ def test_prompt_teaches_execution_report():     # 矩阵 #8 教学钉桩
     assert "未选入 diagnose" in text                  # 失败无根因时如实标注
     assert "diagnose_agent" in text and "test_recall_agent" in text
     assert "root_causes" in text
+
+
+def test_report_prompt_teaches_exemplar_lookup():   # V2c-1 拉通道教学
+    text = _agent().instruction
+    assert "search_knowledge" in text and "范例" in text   # 产出前先检索认可范例
+    assert "不抄" in text                                  # 回音室防线：不抄内容

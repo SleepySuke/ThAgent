@@ -106,7 +106,9 @@ NODE_POLICIES: dict[str, NodePolicy] = {
     # 读 worktree 之外的 cr_report.json 等），产出人读执行报告。
     # ponytail: 300s——聚合全链结论+修复轮实测 180s 不够（真实冒烟超时一次）
     "report_agent": NodePolicy(
-        allowed_tools=frozenset({"read_artifact"}),
+        # V2c-1：+search_knowledge（exemplar 拉通道，裁定 10）——产出前检索
+        # 认可范例参考组织结构（不抄内容，回音室防线）
+        allowed_tools=frozenset({"read_artifact", "search_knowledge"}),
         allowed_cmds=frozenset(),
         # ponytail: 15 轮——同 strategy：upstream 注入后轮次上移，聚合+修复轮要余量
         max_turns=15,
@@ -126,7 +128,9 @@ NODE_POLICIES: dict[str, NodePolicy] = {
     # 工具——read_artifact 读 cr_report/test_recall 全文，read_file/list_files 看
     # 被测模块签名；无命令执行，产物是 JSON 契约（server 落盘，无需 write_file）
     "case_agent": NodePolicy(
-        allowed_tools=frozenset({"read_artifact", "read_file", "list_files"}),
+        # V2c-1：+search_knowledge（exemplar 拉通道，同 report）
+        allowed_tools=frozenset(
+            {"read_artifact", "read_file", "list_files", "search_knowledge"}),
         allowed_cmds=frozenset(),
         max_turns=15,
         # ponytail: 300s——读多文件+设计用例实测 180s 偶发超时（基线 d4 单点

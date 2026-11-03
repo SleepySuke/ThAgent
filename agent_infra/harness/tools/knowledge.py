@@ -6,6 +6,8 @@ KnowledgeBase 进程内单例（惰性），embedding 缓存保证重复调用�
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 
 from harness.contract import RunContext
 from harness.knowledge import KnowledgeBase
@@ -21,6 +23,33 @@ def _kb() -> KnowledgeBase:
 
         _KB = KnowledgeBase(runs_root())
     return _KB
+
+
+def _bump_use(hits: list[dict]) -> None:
+    """档 2 统计信号（九期）：命中 distilled/ 条目 → 旁路计数 +1（矩阵 #21b）。
+
+    内容/信号分离：计数写 `distilled/.counts.json`（tmp+rename 原子写），
+    **绝不写回 md**——写回触发 mtime 重索引 = re-embed 花钱 + 并发写风险。
+    计数失败静默（统计是副产品，不影响检索主路径）。"""
+    names = [h["path"] for h in hits
+             if str(h.get("path", "")).startswith("distilled/")]
+    if not names:
+        return
+    counts_path = _kb().corpus_dir / "distilled" / ".counts.json"
+    try:
+        try:
+            counts = json.loads(counts_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            counts = {}
+        for n in names:
+            entry = counts.setdefault(n, {})
+            if isinstance(entry, dict):
+                entry["use"] = entry.get("use", 0) + 1
+        tmp = counts_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(counts, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, counts_path)
+    except OSError:
+        pass
 
 
 def search_knowledge(run: RunContext, session) -> callable:
@@ -46,6 +75,7 @@ def search_knowledge(run: RunContext, session) -> callable:
             return f"(知识库检索失败: {e.__cause__ or e})"
         if not hits:
             return "(知识库无命中：换关键词重试，或用 request_human 问人)"
+        _bump_use(hits)   # 档 2 统计信号：distilled 命中旁路 +1（矩阵 #21b）
         return "\n\n".join(
             f"[{i + 1}] {h['path']} (score={h['score']:.3f})\n{h['snippet']}"
             for i, h in enumerate(hits))

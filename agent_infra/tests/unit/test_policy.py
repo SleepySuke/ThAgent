@@ -79,3 +79,13 @@ def test_search_knowledge_allowed_for_cr_and_test_recall():
     assert "search_knowledge" in NODE_POLICIES["test_recall_agent"].allowed_tools
     assert "search_knowledge" not in NODE_POLICIES["script_agent"].allowed_tools
     assert "search_knowledge" not in DEFAULT_NODE_POLICY.allowed_tools
+
+
+def test_search_knowledge_exemplar_pull_channel_v2c1():
+    # V2c-1：exemplar 拉通道（裁定 10）——report/case 产出前检索认可范例
+    assert "search_knowledge" in NODE_POLICIES["report_agent"].allowed_tools
+    assert "search_knowledge" in NODE_POLICIES["case_agent"].allowed_tools
+    # 独占集断言：白名单仅四节点（deny-by-default 治理面）
+    assert {n for n, p in NODE_POLICIES.items()
+            if "search_knowledge" in p.allowed_tools} == {
+        "cr_agent", "test_recall_agent", "report_agent", "case_agent"}

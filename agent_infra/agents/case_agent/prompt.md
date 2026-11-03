@@ -39,3 +39,11 @@
 - 写测试脚本或执行任何命令（那是 script_agent / case_executor 的职责）
 - 编造上游 recalled 里没有的 reuse 条目
 - **有风险输入却输出空清单**（无风险输入时如实输出空清单 + summary 说明，不要报错）
+
+## 认可范例检索（exemplar 拉通道）
+
+产出用例清单前，先用 `search_knowledge` 检索同类**认可范例**（如查询「用例
+清单 范例」「用例 范例 exemplar」）。检索到范例时：**参考其清单组织结构与
+粒度水准（scenario 表述、src 指向、linked_risk 关联方式），不抄内容**——
+当前清单的内容必须全部来自本 run 的 upstream 与 artifacts。没有命中就按既有
+契约直接产出。

@@ -199,6 +199,27 @@ def _snippet(chunk: dict) -> str:
     return head + text[:160]
 
 
+def _entry_active(path: Path) -> bool:
+    """语料条目 frontmatter `active` 标志（九期蒸馏条目回滚协议，矩阵 #10）。
+
+    只认 `active: false` 为隔离（缺 frontmatter/缺键默认 active）；手解析
+    零依赖：首个 `---` 与下一个 `---` 之间的 `k: v` 行。读取失败视为隔离
+    （读不出的条目不进索引，宁可漏召回不召回坏内容）。"""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    if not lines or lines[0].strip() != "---":
+        return True
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        k, _, v = line.partition(":")
+        if k.strip() == "active":
+            return v.strip() != "false"
+    return True
+
+
 class BM25Scorer:
     """BM25 打分（k1=1.5 b=0.75，char bigram 分词适配中文，纯 stdlib）。
 
@@ -312,6 +333,9 @@ class KnowledgeBase:
         return len(self._index["chunks"])
 
     def _ensure_index(self) -> None:
+        # 进程级缓存：mtime/_fresh 只在首个 search（冷启动）检查——同进程内
+        # quarantine 改盘后不会自动重索引，回滚跨进程生效（corpus_tools CLI
+        # 与 agent_server 是不同进程，真实使用形态即跨进程；t6-rev Minor #3）
         if self._index is not None:
             return
         idx = self._load_index()
@@ -335,21 +359,30 @@ class KnowledgeBase:
         """索引新鲜度：源 mtime 集合一致 + 嵌入模型一致（维度随模型走，#12）。"""
         if idx.get("model") != _model_of(self.embedder):
             return False
-        now = {p.name: p.stat().st_mtime for p in self._sources()}
+        now = {self._key(p): p.stat().st_mtime for p in self._sources()}
         return idx.get("sources", {}) == now
 
+    def _key(self, p: Path) -> str:
+        # 索引键用相对路径（顶层文件与旧版文件名一致，向后兼容）；
+        # 子目录条目（distilled/x.md）不与顶层同名文件冲突
+        return p.relative_to(self.corpus_dir).as_posix()
+
     def _sources(self) -> list[Path]:
+        """递归扫全部 *.md（九期：distilled/ 子目录新文件被 mtime 惰性重建
+        自动接上——蒸馏落盘即索引，KB 零改动接线）。"""
         if not self.corpus_dir.exists():
             return []
-        return sorted(self.corpus_dir.glob("*.md"))
+        return sorted(self.corpus_dir.rglob("*.md"))
 
     def _build_index(self) -> dict:
         sources: dict[str, float] = {}
         chunks: list[dict] = []
         for p in self._sources():
-            sources[p.name] = p.stat().st_mtime
+            sources[self._key(p)] = p.stat().st_mtime
+            if not _entry_active(p):
+                continue   # 被隔离条目（active:false）不入索引（矩阵 #10 回滚生效）
             for ch in chunk_text(p.read_text(encoding="utf-8")):
-                chunks.append({"path": p.name, "title": ch["title"],
+                chunks.append({"path": self._key(p), "title": ch["title"],
                                "text": ch["text"]})
         if chunks:
             vecs = self.embedder.embed([_embed_input(c) for c in chunks])
