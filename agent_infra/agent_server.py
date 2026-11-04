@@ -300,46 +300,56 @@ def make_adk_run(build_agent, policy: NodePolicy, *,
         agent = build_agent(run, _MANAGER, policy)
         runner = Runner(agent=agent, app_name="agent_infra",
                         session_service=_session_service())
-        session = await _get_or_create_session(
-            runner, f"{run.trace_id}:{run.node_id or 'main'}")
-        # ponytail: 每次 adk_run 重置轮次计数——session 按 trace:node 复用（打断
-        # 续聊），但 node_retry 是新执行新预算；不重置则重试从旧计数起步瞬间
-        # 撞预算死亡（全链冒烟实测：第 2/3 次尝试 turn=16 起步）。DB 后端必须
-        # 走 append_event+state_delta 持久化，直接改 session.state 不落库
-        # getattr 守卫：单测的 fake session（SimpleNamespace）可能没有 state
-        if (getattr(session, "state", None) or {}).get(_TURN_KEY):
-            from google.adk.events import Event, EventActions
-            await runner.session_service.append_event(session, Event(
-                author="harness",
-                actions=EventActions(
-                    state_delta={_TURN_KEY: 0})))
-
-        async def _run_once(text: str) -> str:
-            final = ""
-            async for ev in runner.run_async(
-                    user_id="harness", session_id=session.id,
-                    new_message=types.Content(role="user",
-                                              parts=[types.Part(text=text)])):
-                if not ev.is_final_response():
-                    _sink_deltas(ev, run)
-                if ev.is_final_response() and ev.content and ev.content.parts:
-                    final, thought = _split_parts(ev.content.parts)
-                    if thought:
-                        run.event_sink("llm_thought", {"text": thought[:1500],
-                                                       "full_len": len(thought)})
-            return final
-
-        final = await _run_once(prompt)
-        # 契约修复轮：模型审对了但输出格式漂移（GLM 常见：中文陈述代替 JSON）
-        # ——同一 session 追一轮强约束，省一次全量重审。只修格式，不重试审查。
-        # 判定按 agent 自己的契约（V3）；json 解析错是 ValueError 子类，一并触发
-        check = validate or parse_output
+        # toolset 生命周期归 runner：Runner.close() 是 ADK 唯一回收 toolset
+        #（含 MCP stdio 子进程）的入口，run_async 不收——finally 必关，否则
+        # MCP 挂载时每 run 泄漏一个子进程（t7-rev Important）。close 顺带
+        # flush 共享 session_service，幂等无碍
         try:
-            check(final)
-        except (OutputContractError, ValueError):
-            run.event_sink("contract_repair", {"reason": "format drift"})
-            final = await _run_once(repair_prompt or _REPAIR_PROMPT)
-        return final
+            session = await _get_or_create_session(
+                runner, f"{run.trace_id}:{run.node_id or 'main'}")
+            # ponytail: 每次 adk_run 重置轮次计数——session 按 trace:node 复用（打断
+            # 续聊），但 node_retry 是新执行新预算；不重置则重试从旧计数起步瞬间
+            # 撞预算死亡（全链冒烟实测：第 2/3 次尝试 turn=16 起步）。DB 后端必须
+            # 走 append_event+state_delta 持久化，直接改 session.state 不落库
+            # getattr 守卫：单测的 fake session（SimpleNamespace）可能没有 state
+            if (getattr(session, "state", None) or {}).get(_TURN_KEY):
+                from google.adk.events import Event, EventActions
+                await runner.session_service.append_event(session, Event(
+                    author="harness",
+                    actions=EventActions(
+                        state_delta={_TURN_KEY: 0})))
+
+            async def _run_once(text: str) -> str:
+                final = ""
+                async for ev in runner.run_async(
+                        user_id="harness", session_id=session.id,
+                        new_message=types.Content(role="user",
+                                                  parts=[types.Part(
+                                                      text=text)])):
+                    if not ev.is_final_response():
+                        _sink_deltas(ev, run)
+                    if ev.is_final_response() and ev.content \
+                            and ev.content.parts:
+                        final, thought = _split_parts(ev.content.parts)
+                        if thought:
+                            run.event_sink("llm_thought",
+                                           {"text": thought[:1500],
+                                            "full_len": len(thought)})
+                return final
+
+            final = await _run_once(prompt)
+            # 契约修复轮：模型审对了但输出格式漂移（GLM 常见：中文陈述代替 JSON）
+            # ——同一 session 追一轮强约束，省一次全量重审。只修格式，不重试审查。
+            # 判定按 agent 自己的契约（V3）；json 解析错是 ValueError 子类，一并触发
+            check = validate or parse_output
+            try:
+                check(final)
+            except (OutputContractError, ValueError):
+                run.event_sink("contract_repair", {"reason": "format drift"})
+                final = await _run_once(repair_prompt or _REPAIR_PROMPT)
+            return final
+        finally:
+            await runner.close()
 
     return adk_run
 

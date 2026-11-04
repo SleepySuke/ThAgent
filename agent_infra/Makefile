@@ -22,7 +22,7 @@ EVAL_ENV := AGENT_INFRA_HITL_AUTO=1
 
 .DEFAULT_GOAL := help
 
-.PHONY: help deps repo server server-cr server-planning server-test-recall server-case server-script server-change-report server-diagnose web dev down test lint smoke smoke-hitl knowledge-index eval-retrieval smoke-rag smoke-agents smoke-sdlc eval eval-ab eval-offline eval-update eval-report judge-calibrate clean
+.PHONY: help deps repo server server-cr server-planning server-test-recall server-case server-script server-change-report server-diagnose web dev down test lint smoke smoke-hitl knowledge-index eval-retrieval smoke-rag smoke-agents smoke-sdlc eval eval-ab eval-offline eval-update eval-report judge-calibrate smoke-mcp clean
 
 help: ## 显示本帮助
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -58,6 +58,21 @@ server-diagnose: ## 前台启动 Diagnose Agent（:8108）
 
 web: ## 前台启动 harness web（:8100）
 	uv run python app.py
+
+# opt-in 真实 MCP smoke：真实 GitHub MCP server 是外部二进制/Docker（npx/docker
+# 命令），不进测试、不进 CI——仅在显式提供 env 时手动执行。凭证只经 env 注入，
+# 不写入任何文件/trace。用法：
+#   AGENT_INFRA_MCP_CMD='npx -y @modelcontextprotocol/server-github' \
+#   MCP_GITHUB_TOKEN=ghp_xxx make smoke-mcp
+smoke-mcp: ## 真实 MCP smoke（opt-in，需 AGENT_INFRA_MCP_CMD + MCP_GITHUB_TOKEN）
+	@if [ -z "$(AGENT_INFRA_MCP_CMD)" ]; then \
+		echo "需要 AGENT_INFRA_MCP_CMD（真实 MCP server 启动命令，如 'npx -y @modelcontextprotocol/server-github' 或 docker 命令）"; \
+		echo "用法: AGENT_INFRA_MCP_CMD='...' MCP_GITHUB_TOKEN=xxx make smoke-mcp"; \
+		exit 1; fi
+	@if [ -z "$(MCP_GITHUB_TOKEN)" ]; then \
+		echo "需要 MCP_GITHUB_TOKEN（GitHub PAT，只经 env 注入）"; exit 1; fi
+	@$(ENV_HOOK) AGENT_INFRA_MCP_CMD="$(AGENT_INFRA_MCP_CMD)" MCP_GITHUB_TOKEN="$(MCP_GITHUB_TOKEN)" \
+		uv run python scripts/smoke_mcp.py
 
 dev: ## 后台启动 10 个 agent server + web（日志在 runs/*.log）
 	@mkdir -p runs

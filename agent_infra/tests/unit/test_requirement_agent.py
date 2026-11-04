@@ -28,8 +28,9 @@ def test_build_requirement_agent_wires_readonly_tools():
 
 def test_requirement_policy_readonly_and_memory_off():
     p = NODE_POLICIES["requirement_agent"]
+    # 九期 MCP：+get_pr（opt-in 挂载，白名单常驻——坑 #16 G 层同步）
     assert p.allowed_tools == frozenset(
-        {"read_diff", "read_file", "list_files"})
+        {"read_diff", "read_file", "list_files", "get_pr"})
     assert p.allowed_cmds == frozenset()            # 无命令执行
     assert p.memory_enabled is False                # memory 关闭（设计 §1 G 行）
 

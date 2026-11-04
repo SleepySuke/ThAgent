@@ -84,7 +84,10 @@ NODE_POLICIES: dict[str, NodePolicy] = {
     # 需求分析（六期做实）：只读工具子集——读 diff/文件/列表，无命令执行、
     # memory 关闭（默认值）——产出语义结论（requirement_brief），不亲自审查
     "requirement_agent": NodePolicy(
-        allowed_tools=frozenset({"read_diff", "read_file", "list_files"}),
+        # +get_pr（九期 MCP 接入，坑 #16 同步 G 层白名单）：opt-in MCP 工具，
+        # 裸名（ADK 默认无 server 前缀），仅 AGENT_INFRA_MCP_CMD 设置时挂载
+        allowed_tools=frozenset(
+            {"read_diff", "read_file", "list_files", "get_pr"}),
         allowed_cmds=frozenset(),
         # ponytail: 15 轮——MiMo 实测读 diff+多文件后 10 轮不够产 JSON（全链
         # 冒烟 turn budget exceeded 三连）；工具只读无滥用面，预算从宽

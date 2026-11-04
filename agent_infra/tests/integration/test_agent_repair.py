@@ -48,6 +48,7 @@ class _ScriptedRunner:
         self._replies = list(replies)
         self.prompts = prompts
         self.session_service = _Sessions()
+        self.closed = False
 
     def run_async(self, **kw):
         self.prompts.append(kw["new_message"].parts[0].text)
@@ -55,6 +56,9 @@ class _ScriptedRunner:
         async def gen():
             yield _Ev(self._replies.pop(0))
         return gen()
+
+    async def close(self):
+        self.closed = True   # adk_run 的 finally 必调（t7-rev Important 修复）
 
 
 async def _drive(monkeypatch, policy, replies, *,
@@ -70,7 +74,9 @@ async def _drive(monkeypatch, policy, replies, *,
                      event_sink=lambda e, p: events.append(e))
     adk = make_adk_run(lambda *a: None, policy,
                        validate=validate, repair_prompt=repair_prompt)
-    return await adk(run, "处理以下任务"), prompts, events
+    out = await adk(run, "处理以下任务")
+    assert runner.closed is True   # t7-rev Important：toolset 回收靠 runner.close
+    return out, prompts, events
 
 
 async def test_cr_drift_repaired_with_field_named_prompt(monkeypatch):
