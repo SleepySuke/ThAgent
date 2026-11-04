@@ -51,17 +51,39 @@ CORE_METRICS = (
     "task_completion.cr_hit", "task_completion.verdict_ok",
     "task_completion.plan_match", "task_completion.test_cover",
     "task_completion.e2e_done",
+    # 质量硬维度进门禁（裁定 B：软维度 judge 方差不进回归判据，只记录）
+    "quality.evidence",
 )
 ABS_DROP = 0.05   # 绝对降幅阈值（5pp）
 REL_DROP = 0.10   # 相对降幅阈值（10%)
 
 
 def score_run(golden_entry: dict, run_dir: Path) -> dict:
-    """单 defect 三维打分：tool_calling + task_completion。"""
+    """单 defect 三维打分：tool_calling + task_completion + quality（离线）。"""
     events = load_trace(run_dir)
-    return {"tool_calling": score_tool_calling(
-                events, golden_entry.get("must_use", {})),
-            "task_completion": score_task_completion(golden_entry, run_dir)}
+    out = {"tool_calling": score_tool_calling(
+               events, golden_entry.get("must_use", {})),
+           "task_completion": score_task_completion(golden_entry, run_dir)}
+    # 质量分离线算（裁定 A：不依赖 engine 事件）；hard-only 默认不烧 judge，
+    # 设 AGENT_INFRA_QUALITY_JUDGE 时软维度一并记录（仍不门禁，裁定 B）
+    report_file = run_dir / "artifacts" / "cr_report.json"
+    if report_file.exists():
+        from eval.quality import score_report
+        try:
+            report = json.loads(report_file.read_text(encoding="utf-8"))
+            complete = _llm_judge if os.environ.get(
+                "AGENT_INFRA_QUALITY_JUDGE") else None
+            out["quality"] = score_report(
+                report, REPO, _commit_of(run_dir) or "", complete=complete)
+        except Exception as e:  # 打分异常不拖垮既有三维（矩阵 #8 同款隔离）
+            out["quality_error"] = f"{type(e).__name__}: {e}"
+    return out
+
+
+def _llm_judge(prompt: str) -> str:
+    """软维度 judge 通道（litellm）；仅 AGENT_INFRA_QUALITY_JUDGE 时走。"""
+    from eval.quality import _llm_complete
+    return _llm_complete(prompt)
 
 
 def score_defects(golden: dict, run_dirs: dict[str, Path]) -> tuple[dict, bool]:
@@ -190,14 +212,22 @@ def aggregate_metrics(rows: dict) -> dict:
             k: None for k in ("cr_hit", "verdict_ok", "plan_match",
                               "test_cover", "e2e_done")}
     per_defect = {}
+    evs: list[float] = []
     for t, r in ok.items():
         tc, tk_row = r["tool_calling"], r["task_completion"]
+        q = r.get("quality") or {}
+        ev = q.get("evidence")
+        if ev is not None:
+            evs.append(ev)
         per_defect[t] = {"legality": tc["legality"],
                          "must_use_hit": tc["must_use_hit"],
                          **{k: tk_row[k] for k in ("cr_hit", "verdict_ok",
                                                    "plan_match", "test_cover",
-                                                   "e2e_done")}}
+                                                   "e2e_done")},
+                         "quality_evidence": ev}
     return {"n_defects": len(ok), "per_defect": per_defect,
+            "quality": {"evidence":
+                        round(sum(evs) / len(evs), 4) if evs else None},
             "tool_calling": {
                 "legality": round(sums.get("legality", 0.0) / n, 4),
                 "must_use_hit": round(sums.get("must_use_hit", 0.0) / n, 4),
@@ -256,10 +286,13 @@ def _print_report(rows: dict, metrics: dict, scores_path: Path) -> None:
             print(f"{tag}: ERROR {row['error']}")
             continue
         tc, tk = row["tool_calling"], row["task_completion"]
+        q = row.get("quality") or {}
+        ev = q.get("evidence")
         print(f"{tag}: legality={tc['legality']:.2f} denied={tc['denied']} "
               f"must_use={tc['must_use_hit']:.2f} | cr_hit={tc_hit(tk)} "
               f"plan={tk['plan_match']} cover={tk['test_cover']} "
-              f"e2e={tk['e2e_done']}")
+              f"e2e={tk['e2e_done']} | "
+              f"evidence={ev if ev is not None else 'N/A'}")
     m = metrics
     print(f"\n汇总: legality={m['tool_calling']['legality']:.2f} "
           f"must_use={m['tool_calling']['must_use_hit']:.2f} "

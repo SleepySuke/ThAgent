@@ -73,7 +73,14 @@ def main() -> None:
     golden = load_retrieval_golden(args.golden)
     kb = KnowledgeBase(runs_root())
     try:
-        results = [kb.search(g["query"], top_k=args.topk) for g in golden]
+        # 防线②语义面（t8-rev Important）：评测锚点是手写语料——distilled/
+        # 飞轮条目挤进 top-k 会把 expect 顶出 rank（实测 20 条已挤掉 4/35
+        # 的 rank1）。打分前过滤 distilled 命中，golden 不动，锚点回到外部。
+        # 挤位检测本身归飞轮健康度看板（预研 §十），不在此门禁。
+        results = [
+            [h for h in kb.search(g["query"], top_k=args.topk)
+             if not str(h.get("path", "")).startswith("distilled/")]
+            for g in golden]
     except Exception as e:  # embedding/索引构建失败：响亮退出，绝不静默 0 分
         root = e
         while root.__cause__ is not None:  # 打到异常链末端（API 报的真实原因）

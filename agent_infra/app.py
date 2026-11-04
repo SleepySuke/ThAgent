@@ -72,6 +72,10 @@ def create_app(engine: HarnessEngine | None = None,  # noqa: PLR0915 —— 路�
     if engine is None:
         # 多 agent：base_url 留空 → 按 registry 每节点查 url（一进程一端口）
         engine = HarnessEngine(None, runs)
+    # 质量打分器注入（裁定 A 组装层）：L 层 engine 不 import V 层 eval，
+    # 注入点在这里——手动 accept 路径的质量分挂 review_accepted payload
+    from eval.quality import score_report
+    engine.quality_scorer = score_report
     app.state.engine = engine
 
     @app.get("/")

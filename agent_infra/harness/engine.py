@@ -191,6 +191,10 @@ class HarnessEngine:
         self.node_timeout_s = DEFAULT_NODE_TIMEOUT_S
         self._active_boxes: dict[str, dict] = {}  # run_id → {url, task_id_box}（pause 用）
         self._runs: dict[str, _RunHandle] = {}    # trace_id → 打断句柄（pause/resume 用）
+        # 质量打分器（裁定 A）：由组装层注入（app.py 注 eval.quality.score_report）。
+        # L 层不 import V 层（eval→harness 反向依赖禁止），默认 None = 不打分。
+        # 签名 (report, repo, commit) -> dict；异常由引擎吞掉置 None 不阻断。
+        self.quality_scorer = None
 
     def _url_for(self, node_id: str) -> str:
         if node_id in self._url_overrides:
@@ -326,6 +330,21 @@ class HarnessEngine:
         except Exception as exc:
             tracer.emit("distill_failed", error=str(exc)[:200])
 
+    def _score_quality(self, tracer: Tracer, trace_id: str, payload: dict):
+        """手动 accept 路径的质量分（裁定 A）：打分失败置 None 不阻断（矩阵 #8
+        同款守卫）。report 读 artifacts，repo/commit 取 run payload。"""
+        if self.quality_scorer is None:
+            return None
+        try:
+            report = json.loads(
+                (self.runs_root / trace_id / "artifacts" / "cr_report.json")
+                .read_text(encoding="utf-8"))
+            return self.quality_scorer(report, payload.get("repo", ""),
+                                       payload.get("commit", ""))
+        except Exception as exc:
+            tracer.emit("quality_failed", error=str(exc)[:200])
+            return None
+
     def _persist_completed(self, tracer: Tracer, trace_id: str, round_: int,
                            context_id: str) -> None:
         """终态落盘（t5-rev Critical 根修）：正常完成（直落/auto/审阅 accept
@@ -403,7 +422,14 @@ class HarnessEngine:
         handle.review_feedback = ""
         if accepted:
             self._step(sm, "REVIEW_ACCEPT", tracer)  # → COMPLETED
-            tracer.emit("review_accepted", round=handle.round)
+            # 质量分只挂手动 accept 路径（人工在环，烧 1 次 judge 可接受）；
+            # auto 分支不打分——无人值守评测不烧 judge token（裁定 A）
+            # to_thread：打分含 git show 子进程 + judge LLM（t8-rev Minor
+            # #4——同步跑会冻结 accept 期间的事件循环）
+            quality = await asyncio.to_thread(
+                self._score_quality, tracer, trace_id, payload)
+            tracer.emit("review_accepted", round=handle.round,
+                        quality=quality)
             self._distill(tracer, trace_id, handle.round)   # Task 6 接线
             return None, payload
         # reject → replan（裁定 2/3）：round+1，feedback 覆写注入（始终覆写
