@@ -252,7 +252,7 @@ async def test_replan_round_pause_resume_keeps_progress(tmp_path):
         engine.execute_for("t9", {"repo": "x"}, None))   # None → 走注入 plan
     await _wait_review(engine, "t9")
     engine.review_run("t9", "reject", "第一版不够")       # → round 2（fresh 清盘一次）
-    # 等 round 2 的 cr 已完成、report 在飞
+    # 等 round 2 的 cr 已完成、report 在飞（sent 是完成后 append，此处恰好该用）
     deadline = asyncio.get_running_loop().time() + 2.0
     while len([s for s in engine.sent if s.node_id == "cr_agent"]) < 2:
         assert asyncio.get_running_loop().time() < deadline, "round2 cr 未起"
@@ -294,3 +294,46 @@ async def test_no_report_chain_persists_completed(tmp_path):
                                                    "agent": "cr_agent"}],
                                            edges=[]))
     assert load_checkpoint(runs, "t11")["harness_state"] == "completed"
+
+
+async def test_replan_first_node_pause_resume_no_resurrection(tmp_path):
+    """t9-final I-1 回归：round-2 首个节点执行中 pause→resume，round-1 的
+    同名已完成节点不得从 append-only trace 复活。
+
+    修复前：park 落的空进度 checkpoint 落入 trace 推断分支 → round-1 的
+    cr/report node_end(ok) 全被标已完成 → round-2 静默跳过全部节点。"""
+    runs = tmp_path / "runs"
+
+    class _SlowCr(_PlanEngine):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self.started: list[str] = []   # 入口即记：sent 是完成后才 append
+
+        async def _send(self, node_url, agent_input, tracer, task_id_box=None,
+                        budget=None):
+            self.started.append(agent_input.node_id)
+            if agent_input.node_id == "cr_agent":
+                await asyncio.sleep(0.2)   # round-2 的首个节点在飞时 pause
+            return await super()._send(node_url, agent_input, tracer,
+                                       task_id_box, budget)
+
+    engine = _SlowCr(runs, {"cr_agent": CR_OUT, "report_agent": REPORT_OUT},
+                     plans=[REPORT_PLAN, REPORT_PLAN])
+    task = asyncio.create_task(engine.execute_for("t12", {"repo": "x"}, None))
+    await _wait_review(engine, "t12")
+    engine.review_run("t12", "reject", "重做")        # → round 2（fresh 清盘）
+    # 等 round-2 的 cr 已发出且在飞（本轮尚无 node_end —— I-1 的触发窗）
+    deadline = asyncio.get_running_loop().time() + 2.0
+    while len([n for n in engine.started if n == "cr_agent"]) < 2:
+        assert asyncio.get_running_loop().time() < deadline, "round2 cr 未起"
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)                    # cr 慢段中（0.2s 窗口）
+    assert await engine.pause_run("t12") is True
+    engine.resume_run("t12")
+    await _wait_review(engine, "t12")
+    engine.review_run("t12", "accept")
+    await task
+    cr_n = len([s for s in engine.sent if s.node_id == "cr_agent"])
+    assert cr_n == 2, f"round-2 首节点窗 pause 后 cr 重跑/复活={cr_n}"
+    triggers = _triggers(_events(runs, "t12"))
+    assert triggers.count("REVIEW_REJECT") == 1   # 只 replan 一次（无短路假完成）

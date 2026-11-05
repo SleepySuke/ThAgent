@@ -44,8 +44,14 @@ def _build_mcp_toolset():
     from mcp import StdioServerParameters
 
     parts = shlex.split(cmd)
+    # env 显式转发（t9-final I-2）：mcp SDK 对 env=None 只传 6 变量白名单
+    #（HOME/PATH/...），MCP_GITHUB_TOKEN 到不了真实 server（401）——env 提供时
+    # SDK 与默认白名单合并（stdio/__init__.py get_default_environment 合并语义）
+    env = ({key: os.environ[key] for key in os.environ
+            if key.startswith("MCP_")} or None)
     return McpToolset(connection_params=StdioServerParameters(
-        command=parts[0], args=parts[1:]), tool_filter=list(MCP_TOOL_NAMES))
+        command=parts[0], args=parts[1:], env=env),
+        tool_filter=list(MCP_TOOL_NAMES))
 
 
 def build_agent(run: RunContext, manager: SandboxManager,

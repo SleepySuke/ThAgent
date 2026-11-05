@@ -398,9 +398,10 @@ class HarnessEngine:
         if os.environ.get("AGENT_INFRA_REVIEW_AUTO"):
             # auto 也是 accept 语义（蒸馏照走，接线留 Task 6），但直接走
             # ALL_STEPS_DONE——可用性分层，不是把门拆掉（坑 #22）
+            self._step(sm, "ALL_STEPS_DONE", tracer)
+            # 先状态后副作用（与手动 accept 路径拉齐——t9-final Minor #3）
             tracer.emit("review_auto_accepted", round=handle.round)
             self._distill(tracer, trace_id, handle.round)   # auto 也是 accept
-            self._step(sm, "ALL_STEPS_DONE", tracer)
             return None, payload
         self._step(sm, "SUBMIT_REVIEW", tracer)  # → REVIEW_PENDING
         try:
@@ -422,7 +423,8 @@ class HarnessEngine:
         handle.review_feedback = ""
         if accepted:
             self._step(sm, "REVIEW_ACCEPT", tracer)  # → COMPLETED
-            # 质量分只挂手动 accept 路径（人工在环，烧 1 次 judge 可接受）；
+            # 质量分只挂手动 accept 路径（app 注入的是 hard-only scorer——
+            # 不烧 judge；接 judge-capable 打分器时人工在环 1 次调用可接受）；
             # auto 分支不打分——无人值守评测不烧 judge token（裁定 A）
             # to_thread：打分含 git show 子进程 + judge LLM（t8-rev Minor
             # #4——同步跑会冻结 accept 期间的事件循环）
@@ -456,6 +458,8 @@ class HarnessEngine:
                       current_node=handle.current_node,
                       completed_nodes=cp.get("completed_nodes", []),
                       node_outputs=cp.get("node_outputs", {}),
+                      round_=handle.round,  # 轮次随盘：replan 轮空进度停在首
+                      # 节点时，恢复靠 round 区分「本轮新进度」vs「待自愈」
                       context_id=context_id)
         tracer.emit("run_paused", node_id=handle.current_node)
         if handle.resume_event is None:  # pause_run 已预建则复用
@@ -602,11 +606,18 @@ class HarnessEngine:
             cp = load_checkpoint(run_root, trace_id)
         except json.JSONDecodeError:
             cp = None
-        if cp and cp.get("completed_nodes"):
-            # checkpoint 可能来自旧 plan：按当前 plan 节点 id 过滤（与下方
-            # 推断分支一致），陈旧 id 不得泄入续跑的 upstream/artifact 链
+        if cp and (cp.get("completed_nodes") or cp.get("round", 1) >= 2):
+            # checkpoint 可解析且有进度（或 round≥2——replan 轮的空表是**本轮
+            # 新进度**）即为权威，不落 trace 推断：trace.jsonl 跨轮 append-only，
+            # round-2 首节点 pause 后 resume 若走推断，round-1 的同名
+            # node_end(ok) 会被全部复活（replan 语义静默击穿——t9-final I-1）。
+            # round-1 的**空表**仍落推断：打点①会把损坏 checkpoint 重写成合法
+            # 空表，自愈（产物即进度，四期）正是经这条路径生效——trace 此时
+            # 只含本轮事件，推断安全。cp 缺失/损坏同走推断。
+            # checkpoint 可能来自旧 plan：按当前 plan 节点 id 过滤（与下方推断
+            # 分支一致），陈旧 id 不得泄入续跑的 upstream/artifact 链
             ids = {n["id"] for n in plan.nodes}
-            return ([nid for nid in cp["completed_nodes"] if nid in ids],
+            return ([nid for nid in cp.get("completed_nodes", []) if nid in ids],
                     {k: v for k, v in cp.get("node_outputs", {}).items()
                      if k in ids})
         completed: list[str] = []

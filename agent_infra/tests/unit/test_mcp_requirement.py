@@ -62,3 +62,15 @@ def test_policy_whitelist_covers_mcp_env_command(monkeypatch):
     toolsets = [t for t in _agent().tools if not hasattr(t, "__name__")]
     assert [shlex.split("npx -y @mcp/server-github")] == \
         [[toolsets[0].connection_params.command, *toolsets[0].connection_params.args]]
+
+
+def test_mcp_env_forwarding_for_credentials(monkeypatch, tmp_path):
+    """t9-final I-2 回归：MCP_* 凭证 env 必须显式转发（SDK 白名单不含它们，
+    env=None 时 token 到不了真实 server——401）；无 MCP_* env 时 env=None。"""
+    monkeypatch.setenv("AGENT_INFRA_MCP_CMD", "python fake.py")
+    monkeypatch.setenv("MCP_GITHUB_TOKEN", "ghp_test123")
+    from agents.requirement_agent.agent import _build_mcp_toolset
+    ts = _build_mcp_toolset()
+    assert ts.connection_params.env == {"MCP_GITHUB_TOKEN": "ghp_test123"}
+    monkeypatch.delenv("MCP_GITHUB_TOKEN")
+    assert _build_mcp_toolset().connection_params.env is None

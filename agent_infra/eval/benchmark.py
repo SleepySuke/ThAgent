@@ -338,6 +338,13 @@ def main(argv: list[str] | None = None) -> None:
         run_dirs, single = collect_offline(args.from_dir)
         source = args.source or f"offline:{args.from_dir.name}"
     else:
+        # 在线模式依赖 AGENT_INFRA_REVIEW_AUTO（engine 同进程读，坑 #22 两个
+        # env 进程面不同）：缺省时每个含 report 的 defect 会永久 park 在审阅门
+        #（review_event 无超时）。make eval 已注入；裸跑给响亮警告（t9-final #6）
+        import os as _os
+        if not _os.environ.get("AGENT_INFRA_REVIEW_AUTO"):
+            print("警告：未设 AGENT_INFRA_REVIEW_AUTO——含 report 的链会永久 "
+                  "park 在审阅门。经 `make eval` 跑（自动注入）或自设该 env。")
         run_dirs = asyncio.run(run_online(golden))
         single = False
         source = args.source or "online:bench"

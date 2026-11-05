@@ -131,6 +131,8 @@ class WorktreeProvider:
     def __init__(self, allowed_cmds: frozenset[str]) -> None:
         self._allowed = allowed_cmds
 
+    # 同步 git 快操作（worktree add/prune，首次工具调用时短暂阻塞 loop）——
+    # 裁定 8 sync 保留清单成员（与 destroy/_destroy_orphan 同档，t9-final #7）
     def create(self, spec: SandboxSpec, workdir: Path) -> WorktreeSession:
         workdir.mkdir(parents=True, exist_ok=True)
         wt = workdir / "sandbox"

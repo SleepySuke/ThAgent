@@ -145,10 +145,10 @@ eval-ab: ## A/B 评测：自起服务器（HITL auto-answer），memory 开/关�
 
 BENCH_ARGS :=
 
-eval: ## Benchmark 门禁：自起 10 agent（HITL/REVIEW auto）跑 defect-1..5 → 打分对基线，掉点 exit 1
+eval: ## Benchmark 门禁：自起 10 agent（HITL auto；REVIEW auto 注 benchmark 进程）跑 defect-1..5 → 打分对基线，掉点 exit 1
 	@$(MAKE) -s down
 	@mkdir -p runs
-	@for a in planning_agent:$(PORT_PLANNING) cr_agent:$(PORT_CR) requirement_agent:$(PORT_REQUIREMENT) strategy_agent:$(PORT_STRATEGY) test_recall_agent:$(PORT_TEST_RECALL) case_agent:$(PORT_CASE) script_agent:$(PORT_SCRIPT) change_report_agent:$(PORT_CHANGE_REPORT) diagnose_agent:$(PORT_DIAGNOSE) report_agent:$(PORT_REPORT); do n=$${a%%:*}; p=$${a##*:}; $(ENV_HOOK) $(EVAL_ENV) AGENT_INFRA_REVIEW_AUTO=1 nohup uv run python agent_server.py --agent $$n > runs/$$n.log 2>&1 & echo "$$n pid $$! -> :$$p (HITL/REVIEW auto)"; done
+	@for a in planning_agent:$(PORT_PLANNING) cr_agent:$(PORT_CR) requirement_agent:$(PORT_REQUIREMENT) strategy_agent:$(PORT_STRATEGY) test_recall_agent:$(PORT_TEST_RECALL) case_agent:$(PORT_CASE) script_agent:$(PORT_SCRIPT) change_report_agent:$(PORT_CHANGE_REPORT) diagnose_agent:$(PORT_DIAGNOSE) report_agent:$(PORT_REPORT); do n=$${a%%:*}; p=$${a##*:}; $(ENV_HOOK) $(EVAL_ENV) nohup uv run python agent_server.py --agent $$n > runs/$$n.log 2>&1 & echo "$$n pid $$! -> :$$p (HITL auto)"; done
 	@for i in $$(seq 1 60); do ok=1; for p in $(PORT_PLANNING) $(PORT_CR) $(PORT_REQUIREMENT) $(PORT_STRATEGY) $(PORT_TEST_RECALL) $(PORT_CASE) $(PORT_SCRIPT) $(PORT_REPORT) $(PORT_CHANGE_REPORT) $(PORT_DIAGNOSE); do curl -sf http://127.0.0.1:$$p/.well-known/agent-card.json >/dev/null || ok=0; done; [ $$ok -eq 1 ] && break; sleep 0.5; done; [ $$ok -eq 1 ] || { echo "server 未就绪（见 runs/<agent>.log）"; $(MAKE) -s down; exit 1; }
 	@$(ENV_HOOK) AGENT_INFRA_REVIEW_AUTO=1 uv run python eval/benchmark.py $(BENCH_ARGS); rc=$$?; $(MAKE) -s down; exit $$rc
 
